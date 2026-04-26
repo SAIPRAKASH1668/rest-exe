@@ -1,0 +1,11 @@
+{
+  "/api": {
+    "target": "https://api.dev.yumdude.com",
+    "secure": true,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/api": "/api"
+    },
+    "logLevel": "debug"
+  }
+}

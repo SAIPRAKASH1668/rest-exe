@@ -1,0 +1,276 @@
+@use '../../../../styles/variables' as *;
+@use '../../../../styles/mixins' as *;
+
+.navbar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: $sidebar-width;
+  // Expand navbar height to absorb the status bar area
+  height: calc(#{$navbar-height} + env(safe-area-inset-top, 0px));
+  // Push navbar content below the status bar
+  padding-top: env(safe-area-inset-top, 0px);
+  background: #FFFFFF;
+  border-bottom: 1px solid #E8E5E2;
+  z-index: $z-sticky;
+  transition: left $transition-base;
+  box-shadow: none;
+
+  @include mobile {
+    left: 0;
+  }
+
+  @include tablet {
+    left: $sidebar-collapsed-width;
+  }
+}
+
+.navbar-content {
+  height: 100%;
+  padding: 0 $spacing-xl;
+  @include flex-between;
+  gap: $spacing-xl;
+
+  @include mobile {
+    padding: 0 $spacing-md;
+    gap: $spacing-sm;
+  }
+}
+
+// ── Hamburger (deprecated — removed in favour of bottom nav on mobile) ────────
+.hamburger-btn {
+  display: none; // no longer rendered; sidebar hidden on mobile, tablet uses fixed sidebar
+}
+
+// ── Mobile title (mobile only) — logo + YumDude wordmark ───────────────────
+.mobile-title {
+  display: none;
+
+  @include mobile {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+    font-family: $font-family;
+  }
+}
+
+.mobile-logo {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.mobile-brand-text {
+  display: flex;
+  align-items: baseline;
+
+  .mbt-yum {
+    color: hsl(43, 100%, 55%);
+    font-size: 1.15rem;
+    font-weight: $font-weight-bold;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .mbt-dude {
+    color: $primary-orange;
+    font-size: 1.15rem;
+    font-weight: $font-weight-bold;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+}
+
+.search-section {
+  flex: 1;
+  max-width: 600px;
+
+  @include mobile {
+    display: none;
+  }
+
+  @include tablet {
+    max-width: 400px;
+  }
+
+  @include laptop {
+    max-width: 500px;
+  }
+
+  @include desktop {
+    max-width: 600px;
+  }
+
+  .search-bar {
+    position: relative;
+    width: 100%;
+
+    .search-icon {
+      position: absolute;
+      left: $spacing-md;
+      top: 50%;
+      transform: translateY(-50%);
+      color: $text-muted;
+      font-size: $font-size-base;
+    }
+
+    input {
+      @include input-text;
+      padding-left: calc(#{$spacing-md} * 3);
+      background: $bg-tertiary;
+      border-color: $border-primary;
+
+      &:focus {
+        border-color: $primary-light;
+      }
+    }
+  }
+}
+
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-lg;
+
+  @include mobile {
+    gap: $spacing-sm;
+  }
+}
+
+.user-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  padding: $spacing-sm $spacing-md;
+  border-radius: $radius-md;
+  cursor: pointer;
+  transition: all $transition-fast;
+
+  &:hover {
+    background: $bg-tertiary;
+  }
+
+  @include mobile {
+    padding: $spacing-sm;
+  }
+
+  .user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: $radius-md;
+    background: $primary-orange;
+    @include flex-center;
+    font-size: $font-size-lg;
+    color: #FFFFFF;
+    flex-shrink: 0;
+  }
+
+  .dropdown-menu {
+    position: absolute;
+    top: calc(100% + #{$spacing-sm});
+    right: 0;
+    min-width: 220px;
+    background: $bg-card;
+    border: 1px solid $border-primary;
+    border-radius: $radius-md;
+    box-shadow: $shadow-lg;
+    padding: $spacing-sm 0;
+    z-index: $z-dropdown;
+    animation: slideInUp $transition-fast;
+
+    @include mobile {
+      min-width: min(280px, calc(100vw - 2rem));
+      right: -$spacing-sm;
+    }
+
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: $spacing-md;
+      padding: $spacing-sm $spacing-lg;
+      text-decoration: none;
+      font-size: $font-size-sm;
+      color: $text-secondary;
+      transition: background $transition-fast, color $transition-fast;
+      cursor: pointer;
+
+      &:hover {
+        background: $bg-tertiary;
+        color: $text-primary;
+      }
+
+      &--danger {
+        color: $status-error;
+        &:hover { background: rgba($status-error, 0.06); color: darken($status-error, 10%); }
+      }
+
+      i {
+        width: 20px;
+        text-align: center;
+        font-size: $font-size-base;
+      }
+    }
+
+    .dropdown-divider {
+      height: 1px;
+      background: $border-primary;
+      margin: $spacing-sm 0;
+
+      &--profile { margin-bottom: 0; }
+    }
+
+    // Profile header — always shown in dropdown (name never shown in navbar)
+    .dropdown-profile {
+      display: flex;
+      align-items: center;
+      gap: $spacing-md;
+      padding: $spacing-md $spacing-lg;
+      background: $bg-secondary;
+
+      &-avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: $radius-md;
+        background: $primary-orange;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: $font-size-base;
+        color: #fff;
+        flex-shrink: 0;
+      }
+
+      &-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      &-name {
+        font-size: $font-size-sm;
+        font-weight: $font-weight-bold;
+        color: $text-primary;
+        margin: 0;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      &-restaurant {
+        font-size: $font-size-xs;
+        color: $text-muted;
+        margin: 0;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+}

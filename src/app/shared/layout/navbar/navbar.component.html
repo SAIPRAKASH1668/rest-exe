@@ -1,0 +1,66 @@
+<header class="navbar">
+  <div class="navbar-content">
+
+    <!-- Mobile title: brand logo + YumDude (no space), visible on mobile only -->
+    <div class="mobile-title">
+      <img class="mobile-logo" src="/favicon.svg" alt="" aria-hidden="true" />
+      <span class="mobile-brand-text"><span class="mbt-yum">Yum</span><span class="mbt-dude">Dude</span></span>
+    </div>
+
+    <!-- Search Bar (hidden on mobile, mobile-title shows instead) -->
+    <div class="search-section">
+      <div class="search-bar">
+        <i class="fas fa-search search-icon"></i>
+        <input type="text" placeholder="Search orders, menu items..." />
+      </div>
+    </div>
+
+    <!-- Right Section -->
+    <div class="navbar-actions">
+      <!-- Restaurant Status Toggle -->
+      <app-restaurant-status-toggle
+        [isOpen]="isRestaurantOpen"
+        (isOpenChange)="onRestaurantStatusChange($event)">
+      </app-restaurant-status-toggle>
+
+      <!-- User Menu — avatar only; name/restaurant shown inside dropdown -->
+      <div class="user-menu" (click)="toggleUserMenu()">
+        <div class="user-avatar">
+          <i class="fas fa-user"></i>
+        </div>
+
+        <!-- Dropdown Menu -->
+        <div class="dropdown-menu" *ngIf="showUserMenu">
+          <!-- Profile header — shown on mobile/tablet where user-info is hidden -->
+          <div class="dropdown-profile">
+            <div class="dropdown-profile-avatar">
+              <i class="fas fa-user"></i>
+            </div>
+            <div class="dropdown-profile-info">
+              <p class="dropdown-profile-name">{{ ownerName || currentUser?.name || 'Owner' }}</p>
+              <p class="dropdown-profile-restaurant">{{ restaurantName || currentUser?.restaurantName || 'Restaurant' }}</p>
+            </div>
+          </div>
+          <div class="dropdown-divider dropdown-divider--profile"></div>
+          <a href="#" class="dropdown-item">
+            <i class="fas fa-user-circle"></i>
+            <span>My Profile</span>
+          </a>
+          <a href="#" class="dropdown-item">
+            <i class="fas fa-cog"></i>
+            <span>Settings</span>
+          </a>
+          <a routerLink="/dashboard/printer-settings" class="dropdown-item">
+            <i class="fas fa-print"></i>
+            <span>Printer Settings</span>
+          </a>
+          <div class="dropdown-divider"></div>
+          <a href="#" class="dropdown-item dropdown-item--danger" (click)="logout()">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>

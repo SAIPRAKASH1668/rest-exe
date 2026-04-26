@@ -1,0 +1,1213 @@
+﻿// ============================================================
+// Menu Component
+// Premium list-view, Swiggy/Zomato partner style
+// Sharp corners, white surface, clean ruled layout
+// ============================================================
+
+@use '../../../styles/variables' as v;
+@use '../../../styles/mixins' as *;
+
+// ── Page root ─────────────────────────────────────────────────────────────────
+.menu-root {
+  max-width: 1400px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  animation: mnFade 0.25s ease both;
+
+  // Compensate for fixed category tab bar taken out of flow
+  @include tablet { padding-top: 3.25rem; }
+  @include mobile { padding-top: 3.25rem; }
+}
+
+@keyframes mnFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+.mn-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1.5px solid #E8E5E2;
+  gap: 1rem;
+
+  @include tablet {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  @include mobile {
+    flex-direction: column;
+    align-items: stretch;  // stretches Add button to full width on mobile
+    margin-bottom: 1rem;
+    padding-bottom: 0.875rem;
+    gap: 0.75rem;
+  }
+}
+
+.mn-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: v.$text-primary;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.2rem;
+}
+
+.mn-subtitle {
+  font-size: 0.8125rem;
+  color: v.$text-muted;
+  margin: 0;
+}
+
+.mn-btn-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: v.$primary-orange;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 3px;
+  padding: 0.5625rem 1.125rem;
+  font-family: v.$font-family;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  box-shadow: 0 2px 0 v.$dark-orange;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+
+  &:hover { background: v.$accent-orange; }
+  &:active { transform: translateY(2px); box-shadow: none; }
+
+  // Full-width prominent CTA on mobile
+  @include mobile { min-height: 48px; width: 100%; font-size: 0.875rem; }
+  @include tablet { min-height: 44px; }
+}
+
+// ── Category Tabs ─────────────────────────────────────────────────────────────
+.mn-cats {
+  display: flex;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+  padding: 0.625rem 0 0.5rem;
+  position: sticky;
+  top: var(--navbar-total-height);   // lock just below the fixed navbar on scroll
+  z-index: 20;
+  background: #FFFFFF;
+  border-bottom: 1px solid #F0EEEC;
+
+  &::-webkit-scrollbar { height: 3px; }
+  &::-webkit-scrollbar-thumb { background: #D8D5D1; border-radius: 2px; }
+
+  // ── Tablet: fixed so rows never scroll behind the chip bar ──
+  @include tablet {
+    position: fixed;
+    top: var(--navbar-total-height);
+    left: v.$sidebar-collapsed-width;
+    right: 0;
+    width: auto;
+    margin-bottom: 0;
+    padding: 0.5rem 1.25rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    z-index: 50;
+  }
+
+  // ── Mobile: same fix, full-width ──
+  @include mobile {
+    position: fixed;
+    top: var(--navbar-total-height);
+    left: 0;
+    right: 0;
+    width: 100%;
+    margin-bottom: 0;
+    padding: 0.5rem v.$spacing-md;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    z-index: 50;
+  }
+}
+
+.mn-cat {
+  background: #FFFFFF;
+  border: 1.5px solid #E8E5E2;
+  border-radius: 2px;
+  color: v.$text-secondary;
+  padding: 0.375rem 0.875rem;
+  font-family: v.$font-family;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+
+  &:hover {
+    border-color: v.$primary-orange;
+    color: v.$primary-orange;
+  }
+
+  &.active {
+    background: v.$primary-orange;
+    border-color: v.$primary-orange;
+    color: #FFFFFF;
+    box-shadow: 0 2px 0 v.$dark-orange;
+  }
+}
+
+// ── Table scroll wrapper ───────────────────────────────────────────────────────
+.mn-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #D8D5D1 transparent;
+
+  &::-webkit-scrollbar       { height: 4px; }
+  &::-webkit-scrollbar-thumb { background: #D8D5D1; border-radius: 2px; }
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+.mn-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;  // fixed: column widths driven by th, Item column gets remaining space
+  // Fluid width prevents the action columns from being clipped on smaller shells
+}
+
+// ── Table header cells ────────────────────────────────────────────────────────
+.mn-th {
+  padding: 0.75rem 0.625rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: v.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  border-bottom: 1.5px solid #E8E5E2;
+  background: #FFFFFF;
+  text-align: left;
+
+  &.mn-th-thumb    { width: 56px;  padding-right: 0; }
+  &.mn-th-cat      { width: 110px; }
+  &.mn-th-menprice { width: 90px;  text-align: center; }
+  &.mn-th-hike     { width: 72px;  text-align: center; }
+  &.mn-th-disprice { width: 92px;  text-align: center; }
+  &.mn-th-avail    { width: 92px;  text-align: center; }
+  &.mn-th-act      { width: 56px;  text-align: center; }
+  // mn-th-item: no width — takes all remaining flexible space
+}
+
+// ── Table body rows ───────────────────────────────────────────────────────────
+.mn-row {
+  border-bottom: 1px solid #F0EEEC;
+  transition: background 0.1s ease;
+
+  &:hover { background: #FAFAF9; }
+  &:last-child td { border-bottom: none; }
+}
+
+.mn-td {
+  padding: 0.625rem 0.625rem;
+  vertical-align: middle;
+
+  &.mn-td-thumb    { padding-right: 0; }
+  &.mn-td-info     { overflow: hidden; }  // prevent name/desc from breaking fixed layout
+  &.mn-td-menprice,
+  &.mn-td-hike,
+  &.mn-td-price,
+  &.mn-td-avail,
+  &.mn-td-act      { text-align: center; }
+}
+
+// ── Responsive: hide secondary columns on narrow screens ─────────────────────
+@media (max-width: 899px) {
+  .mn-th-cat,      .mn-td-cat,
+  .mn-th-menprice, .mn-td-menprice,
+  .mn-th-hike,     .mn-td-hike { display: none; }
+}
+
+@include mobile {
+  .mn-th-cat,      .mn-td-cat,
+  .mn-th-menprice, .mn-td-menprice,
+  .mn-th-hike,     .mn-td-hike,
+  .mn-th-disprice, .mn-td-price { display: none; }
+}
+
+// ── Thumbnail ─────────────────────────────────────────────────────────────────
+.mn-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 3px;
+  background-color: #F0EEEC;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid #E8E5E2;
+
+  &.no-img i {
+    font-size: 1.125rem;
+    color: #C8C4C0;
+  }
+
+  @include tablet { width: 56px; height: 56px; border-radius: 3px; }
+  @include mobile { width: 52px; height: 52px; border-radius: 4px; border-color: #E8E5E2; }
+}
+
+// ── Item info ─────────────────────────────────────────────────────────────────
+.mn-info {
+  padding: 0 1rem 0 0.875rem;
+  min-width: 0;
+}
+
+.mn-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
+// Standard FSSAI-style veg/non-veg indicator
+.mn-veg-dot {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid #10B981;
+  border-radius: 2px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &::after {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10B981;
+  }
+
+  &.non-veg {
+    border-color: #EF4444;
+    &::after { background: #EF4444; }
+  }
+}
+
+.mn-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: v.$text-primary;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  // Allow name to wrap on mobile so long dish names aren't lost
+  @include mobile { white-space: normal; font-size: 0.875rem; }
+}
+
+.mn-desc {
+  font-size: 0.78rem;
+  color: v.$text-muted;
+  margin: 0;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+// ── Category cell ─────────────────────────────────────────────────────────────
+
+.mn-cat-tag {
+  display: inline-flex;
+  padding: 3px 8px;
+  background: #F5F3F0;
+  border: 1px solid #E8E5E2;
+  border-radius: 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: v.$text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.mn-subcat-tag {
+  display: inline-flex;
+  margin-top: 4px;
+  padding: 2px 6px;
+  background: rgba(232, 58, 58, 0.06);
+  border: 1px solid rgba(232, 58, 58, 0.18);
+  border-radius: 2px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: v.$primary-orange;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.mn-cat-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+// ── Price — customer-facing display price ────────────────────────────────────
+.mn-price-cell {
+  text-align: center;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: v.$text-primary;
+  font-variant-numeric: tabular-nums;
+}
+
+// ── Menu Price (restaurant internal) ─────────────────────────────────────────
+.mn-menprice-cell {
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: v.$text-secondary;
+  font-variant-numeric: tabular-nums;
+}
+
+// ── Hike % ───────────────────────────────────────────────────────────────────
+.mn-hike-cell {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #059669;   // green accent — positive margin indicator
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+// ── Price meta (mobile/tablet: shown inside .mn-info) ────────────────────────
+.mn-price-meta {
+  font-size: 0.7rem;
+  color: v.$text-muted;
+  margin: 0.15rem 0 0;
+  line-height: 1.3;
+  display: none;    // hidden on desktop — shown by breakpoint below
+
+  @include tablet { display: block; }
+  @include mobile { display: block; }
+}
+
+// ── Availability toggle ───────────────────────────────────────────────────────
+.mn-avail-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.mn-avail-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: v.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  width: 20px;
+
+  &.on { color: #10B981; }
+}
+
+.mn-toggle {
+  position: relative;
+  display: block;
+  width: 38px;
+  height: 21px;
+  flex-shrink: 0;
+  cursor: pointer;
+
+  input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+
+    &:checked + .mn-track {
+      background: #10B981;
+      border-color: #0d9488;
+
+      &::after { transform: translateX(17px); }
+    }
+  }
+}
+
+.mn-track {
+  position: absolute;
+  inset: 0;
+  background: #D1CEC9;
+  border: 1.5px solid #B8B4AE;
+  border-radius: 20px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    top: 1px;
+    left: 1px;
+    background: #FFFFFF;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+}
+
+// ── Edit action ───────────────────────────────────────────────────────────────
+.mn-act-cell {
+  display: flex;
+  justify-content: center;
+}
+
+.mn-btn-edit {
+  background: transparent;
+  border: 1.5px solid #E8E5E2;
+  border-radius: 2px;
+  color: v.$text-muted;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: v.$primary-orange;
+    color: v.$primary-orange;
+    background: rgba(232, 58, 58, 0.04);
+  }
+
+  @include tablet {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #F5F3F1;
+    border-color: transparent;
+    color: v.$text-secondary;
+
+    &:hover, &:active {
+      background: rgba(232, 58, 58, 0.08);
+      border-color: transparent;
+      color: v.$primary-orange;
+    }
+  }
+
+  @include mobile {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #F5F3F1;
+    border-color: transparent;
+    color: v.$text-secondary;
+    font-size: 0.8125rem;
+
+    &:hover, &:active {
+      background: rgba(232, 58, 58, 0.08);
+      border-color: transparent;
+      color: v.$primary-orange;
+    }
+  }
+}
+
+// ── Loading ───────────────────────────────────────────────────────────────────
+.mn-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 4rem 2rem;
+  color: v.$text-muted;
+
+  p { font-size: 0.875rem; margin: 0; }
+}
+
+.mn-spinner {
+  width: 30px;
+  height: 30px;
+  border: 2px solid #E8E5E2;
+  border-top-color: v.$primary-orange;
+  border-radius: 50%;
+  animation: mnSpin 0.7s linear infinite;
+}
+
+@keyframes mnSpin { to { transform: rotate(360deg); } }
+
+// ── Empty states ──────────────────────────────────────────────────────────────
+.mn-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 5rem 2rem;
+  text-align: center;
+
+  i { font-size: 2.5rem; color: #C8C4C0; }
+  h3 { font-size: 1.125rem; font-weight: 700; color: v.$text-primary; margin: 0; }
+  p  { font-size: 0.875rem; color: v.$text-muted; margin: 0; }
+}
+
+.mn-no-results {
+  padding: 2.5rem;
+  text-align: center;
+  color: v.$text-muted;
+  font-size: 0.875rem;
+  border: 1.5px dashed #E8E5E2;
+  border-radius: 3px;
+  margin-top: 0.5rem;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Add / Edit Modal
+// ════════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Add / Edit Item Modal — Premium Redesign
+// ══════════════════════════════════════════════════════════════════════════════
+.mn-modal-bg {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: v.$sidebar-width;  // exclude sidebar from backdrop
+  background: rgba(10, 4, 4, 0.6);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: mnFadeIn 0.18s ease;
+
+  // Tablet: sidebar always collapsed, so offset by collapsed width only
+  @include tablet {
+    left: v.$sidebar-collapsed-width;
+    padding: 1.25rem;
+    align-items: center;
+  }
+
+  // Mobile: full-screen backdrop, sheet anchored to bottom
+  @include mobile {
+    left: 0;
+    padding: 0;
+    align-items: flex-end;  // bottom sheet
+  }
+}
+
+@keyframes mnFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.mn-modal {
+  background: #FFFFFF;
+  border-radius: 4px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 94vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22), 0 4px 16px rgba(0,0,0,0.1);
+  animation: mnSlideUp 0.22s cubic-bezier(0.34, 1.26, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb { background: #D8D5D1; border-radius: 0; }
+
+  // Tablet: wider sheet, centered
+  @include tablet {
+    max-width: calc(100% - 2.5rem);
+    max-height: 92vh;
+  }
+
+  // Mobile: bottom sheet — slides up from bottom edge
+  @include mobile {
+    max-width: 100%;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 92vh;
+    animation: mnSheetUp 0.28s cubic-bezier(0.34, 1.26, 0.64, 1);
+  }
+}
+
+@keyframes mnSheetUp {
+  from { transform: translateY(100%); opacity: 0.85; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes mnSlideUp {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+// Top accent bar
+.mn-modal-accent {
+  height: 4px;
+  background: linear-gradient(90deg, v.$primary-orange 0%, v.$accent-orange 100%);
+  border-radius: 4px 4px 0 0;
+  flex-shrink: 0;
+
+  // On mobile the sheet has 16px border-radius, match the top corners
+  @include mobile { border-radius: 16px 16px 0 0; }
+}
+
+// Modal header
+.mn-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.125rem 1.375rem;
+  border-bottom: 1px solid #F0EEEC;
+  flex-shrink: 0;
+  gap: 1rem;
+}
+
+.mn-modal-head-left {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.mn-modal-icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(232, 58, 58, 0.08);
+  border: 1.5px solid rgba(232, 58, 58, 0.15);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: v.$primary-orange;
+  font-size: 1rem;
+}
+
+.mn-modal-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: v.$text-primary;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.125rem;
+}
+
+.mn-modal-subtitle {
+  font-size: 0.78rem;
+  color: v.$text-muted;
+  margin: 0;
+}
+
+.mn-modal-close {
+  background: transparent;
+  border: 1.5px solid #E8E5E2;
+  border-radius: 3px;
+  cursor: pointer;
+  color: v.$text-muted;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.875rem;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: v.$status-error;
+    color: v.$status-error;
+    background: rgba(239, 68, 68, 0.05);
+  }
+}
+
+// ── Form ──────────────────────────────────────────────────────────────────────
+.mn-form {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+// Form sections
+.mn-form-section {
+  padding: 1.125rem 1.375rem;
+  border-bottom: 1px solid #F0EEEC;
+
+  &.mn-section-bottom { border-bottom: none; }
+
+  @include mobile { padding: 1rem; }
+}
+
+.mn-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: v.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.875rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed #F0EEEC;
+
+  i { color: v.$primary-orange; font-size: 0.75rem; }
+}
+
+.mn-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.875rem;
+
+  @include mobile { grid-template-columns: 1fr; }
+}
+
+.mn-fg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.325rem;
+
+  &.mn-full { grid-column: 1 / -1; }
+
+  label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: v.$text-secondary;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  input[type="url"],
+  select,
+  textarea {
+    background: #FAFAF9;
+    border: 1.5px solid #E8E5E2;
+    border-radius: 3px;
+    padding: 0.5625rem 0.75rem;
+    color: v.$text-primary;
+    font-family: v.$font-family;
+    font-size: 0.875rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+
+    &::placeholder { color: #C0BBB5; }
+    &:focus { border-color: v.$primary-orange; background: #FFFFFF; }
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 70px;
+  }
+
+  select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M5 7L0 0h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.875rem center;
+    background-color: #FAFAF9;
+    padding-right: 2.5rem;
+  }
+}
+
+.mn-req {
+  color: v.$primary-orange;
+  font-style: normal;
+}
+
+.mn-field-hint {
+  font-size: 0.7rem;
+  color: v.$text-muted;
+  margin-top: 0.125rem;
+}
+
+// Hike % config hint next to label
+.mn-hike-max-hint {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #059669;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 0.25rem;
+}
+
+// Display price preview (read-only field in form)
+.mn-disprice-preview {
+  background: #F0F9F4;
+  border: 1.5px solid #A7F3D0;
+  border-radius: 3px;
+  padding: 0.5625rem 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #065F46;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.mn-disprice-badge {
+  display: inline-block;
+  background: rgba(16,185,129,0.1);
+  color: #059669;
+  border-radius: 2px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+// Hike + display price row — always stays 2 columns even on mobile
+.mn-form-row-hike {
+  grid-template-columns: 1fr 1fr !important;
+
+  @include mobile { grid-template-columns: 1fr 1fr !important; }
+}
+
+// Veg / Non-Veg food-type toggle
+.mn-type-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.625rem;
+}
+
+.mn-type-lbl {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: v.$text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.mn-type-toggle {
+  display: flex;
+  border: 1.5px solid #E8E5E2;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mn-type-btn {
+  background: transparent;
+  border: none;
+  padding: 0.425rem 0.875rem;
+  font-family: v.$font-family;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: v.$text-muted;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.12s ease;
+
+  & + & { border-left: 1.5px solid #E8E5E2; }
+
+  &.veg {
+    background: rgba(16, 185, 129, 0.08);
+    color: #065F46;
+    .mn-veg-dot { background: #059669; }
+  }
+
+  &.non-veg {
+    background: rgba(239, 68, 68, 0.08);
+    color: #991B1B;
+    .mn-veg-dot { background: #DC2626; }
+  }
+}
+
+// Price input prefix / suffix
+.mn-price-input-wrap {
+  position: relative;
+
+  .mn-price-prefix {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: v.$text-secondary;
+    pointer-events: none;
+  }
+
+  .mn-price-suffix {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: v.$text-secondary;
+    pointer-events: none;
+  }
+
+  input {
+    padding-left: 1.75rem !important;
+  }
+
+  // When suffix is present (hike % field), pad right side too
+  &:has(.mn-price-suffix) input {
+    padding-right: 2rem !important;
+  }
+}
+
+// ── Item image multi-upload section ──────────────────────────────────────────
+.mn-item-img-section {
+  margin-bottom: 0.875rem;
+}
+
+.mn-item-img-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+
+  .mn-item-img-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #3D3A37;
+
+    span {
+      font-weight: 400;
+      color: #9B9490;
+    }
+  }
+
+  .mn-item-img-count {
+    font-size: 0.6875rem;
+    color: #9B9490;
+    font-weight: 500;
+  }
+}
+
+.mn-item-img-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mn-item-img-tile {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+}
+
+.mn-tile-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.625rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease;
+  z-index: 2;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.8);
+  }
+}
+
+.mn-tile-pending {
+  border: 1.5px solid #B8D4B8;
+}
+
+.mn-tile-new-badge {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(80, 140, 80, 0.88);
+  color: #fff;
+  border-radius: 2px;
+  padding: 1px 4px;
+  z-index: 2;
+}
+
+.mn-tile-add {
+  border: 1.5px dashed #D8D5D1;
+  background: #FAFAF9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  cursor: pointer;
+  color: #B5AFA9;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  overflow: visible;
+
+  svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  span {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  &:hover {
+    border-color: #9B9490;
+    background: #F0EDE9;
+    color: #7A736C;
+  }
+}
+
+.mn-item-img-hint {
+  font-size: 0.6875rem;
+  color: #9B9490;
+  margin: 0.375rem 0 0;
+  line-height: 1.4;
+}
+
+// Availability row
+.mn-avail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.875rem;
+  background: #FAFAF9;
+  border: 1.5px solid #E8E5E2;
+  border-radius: 3px;
+}
+
+.mn-avail-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.mn-avail-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: v.$text-primary;
+}
+
+.mn-avail-desc {
+  font-size: 0.75rem;
+  color: v.$text-muted;
+}
+
+// ── Form actions ──────────────────────────────────────────────────────────────
+.mn-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.375rem;
+  border-top: 1.5px solid #E8E5E2;
+  background: #FAFAF9;
+  border-radius: 0 0 4px 4px;
+  flex-shrink: 0;
+
+  @include tablet {
+    padding: 0.875rem 1.25rem;
+  }
+
+  // Stack save on top (primary CTA first), cancel below, full width
+  @include mobile {
+    flex-direction: column-reverse;
+    gap: 0.625rem;
+    padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 0;  // sheet has no border-radius at bottom
+  }
+}
+
+.mn-btn-cancel {
+  background: #FFFFFF;
+  border: 1.5px solid #E8E5E2;
+  border-radius: 3px;
+  padding: 0.5rem 1.125rem;
+  color: v.$text-secondary;
+  font-family: v.$font-family;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: v.$status-error;
+    color: v.$status-error;
+    background: rgba(239,68,68,0.04);
+  }
+
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  @include mobile { width: 100%; min-height: 48px; font-size: 0.9375rem; }
+  @include tablet { min-height: 44px; }
+}
+
+.mn-btn-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: v.$primary-orange;
+  border: none;
+  border-radius: 3px;
+  padding: 0.5625rem 1.375rem;
+  color: #FFFFFF;
+  font-family: v.$font-family;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  box-shadow: 0 2px 0 v.$dark-orange;
+
+  &:hover:not(:disabled) { background: v.$accent-orange; }
+  &:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+  &:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+  @include mobile { width: 100%; min-height: 48px; font-size: 0.9375rem; }
+  @include tablet { min-height: 44px; }
+}

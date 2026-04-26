@@ -1,0 +1,364 @@
+﻿<div class="ord-root" [class.ord-root--no-printer]="!hasPrinter">
+
+  <!-- ── Tab Bar ──────────────────────────────────────────────────────────── -->
+  <div class="ord-tabs">
+    <button class="ord-tab" [class.active]="activeTab === 'new'" (click)="setActiveTab('new')">
+      <i class="fas fa-bell"></i>
+      <span>New Orders</span>
+      <span class="ord-badge" *ngIf="getTabCount('new') > 0">{{ getTabCount('new') }}</span>
+    </button>
+    <button class="ord-tab" [class.active]="activeTab === 'preparing'" (click)="setActiveTab('preparing')">
+      <i class="fas fa-fire"></i>
+      <span>Preparing</span>
+      <span class="ord-badge" *ngIf="getTabCount('preparing') > 0">{{ getTabCount('preparing') }}</span>
+    </button>
+    <button class="ord-tab" [class.active]="activeTab === 'ready'" (click)="setActiveTab('ready')">
+      <i class="fas fa-box"></i>
+      <span>Ready</span>
+      <span class="ord-badge" *ngIf="getTabCount('ready') > 0">{{ getTabCount('ready') }}</span>
+    </button>
+    <button class="ord-tab" [class.active]="activeTab === 'completed'" (click)="setActiveTab('completed')">
+      <i class="fas fa-check-circle"></i>
+      <span>Completed</span>
+    </button>
+    <button class="ord-tab" [class.active]="activeTab === 'cancelled'" (click)="setActiveTab('cancelled')">
+      <i class="fas fa-ban"></i>
+      <span>Cancelled</span>
+    </button>
+  </div>
+
+  <!-- ── Printer: no-printer nudge ─────────────────────────────────────────── -->
+  <div class="ord-printer-nudge" *ngIf="!hasPrinter">
+    <i class="fas fa-print"></i>
+    <span>No printer configured — orders won't auto-print.</span>
+    <a routerLink="/dashboard/printer-settings" class="ord-printer-nudge-link">
+      Set up printer <i class="fas fa-arrow-right"></i>
+    </a>
+  </div>
+
+  <!-- ── Printer: live print status toast ──────────────────────────────────── -->
+  <div class="ord-print-toast"
+       [class.ord-print-toast--connecting]="printStatus === 'connecting'"
+       [class.ord-print-toast--printing]="printStatus === 'printing'"
+       [class.ord-print-toast--success]="printStatus === 'success'"
+       [class.ord-print-toast--error]="printStatus === 'error'"
+       *ngIf="printStatus !== 'idle'">
+    <i class="fas"
+       [class.fa-circle-notch]="printStatus === 'connecting' || printStatus === 'printing'"
+       [class.fa-spin]="printStatus === 'connecting' || printStatus === 'printing'"
+       [class.fa-check-circle]="printStatus === 'success'"
+       [class.fa-times-circle]="printStatus === 'error'"></i>
+    <span *ngIf="printStatus === 'connecting'">Connecting to printer…</span>
+    <span *ngIf="printStatus === 'printing'">Printing KOT &amp; Bill…</span>
+    <span *ngIf="printStatus === 'success'">Printed successfully ✓</span>
+    <span *ngIf="printStatus === 'error'">Print failed — check printer connection</span>
+  </div>
+
+  <!-- ── Loading ───────────────────────────────────────────────────────────── -->
+  <div class="ord-loading" *ngIf="loading">
+    <div class="ord-spinner"></div>
+    <p>Loading orders…</p>
+  </div>
+
+  <!-- ── Orders Grid ───────────────────────────────────────────────────────── -->
+  <div class="ord-grid" *ngIf="!loading">
+
+    <!-- ── Order Card ──────────────────────────────────────────────────────── -->
+    <div class="ord-card" *ngFor="let order of getOrders()" [attr.data-status]="order.status">
+
+      <!-- Card Header: ID + copy + expand + phone + time + status -->
+      <div class="ord-head">
+        <div class="ord-id-row">
+          <h3 class="ord-id" [title]="order.orderId">{{ order.orderId }}</h3>
+          <button class="ord-icon-btn" (click)="copyOrderId(order.orderId); $event.stopPropagation()" title="Copy ID">
+            <i class="fas fa-copy"></i>
+          </button>
+          <button class="ord-icon-btn" (click)="expandOrder(order); $event.stopPropagation()" title="View details">
+            <i class="fas fa-expand-alt"></i>
+          </button>
+        </div>
+        <div class="ord-meta">
+          <span class="ord-phone">
+            <i class="fas fa-phone"></i>{{ order.customerPhone }}
+          </span>
+          <span class="ord-time">
+            <i class="fas fa-clock"></i>{{ getRelativeTime(order.createdAt) }}
+          </span>
+          <span class="ord-status-pill" [attr.data-status]="order.status">
+            {{ getStatusLabel(order.status) }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Items -->
+      <div class="ord-items">
+        <div class="ord-items-lbl">ITEMS</div>
+        <div class="ord-item-row" *ngFor="let item of order.items.slice(0, 4)">
+          <span class="ord-item-name">{{ item.name }}</span>
+          <span class="ord-item-qty">×{{ item.quantity }}</span>
+        </div>
+        <button class="ord-see-more"
+          *ngIf="hasMoreItems(order)"
+          (click)="expandOrder(order); $event.stopPropagation()">
+          + {{ order.items.length - 4 }} more items
+        </button>
+      </div>
+
+      <!-- Delivery address + rider -->
+      <div class="ord-delivery">
+        <div class="ord-addr-row">
+          <i class="fas fa-map-marker-alt"></i>
+          <span>{{ order.deliveryAddress }}</span>
+        </div>
+        <div class="ord-rider-row" *ngIf="order.riderId">
+          <i class="fas fa-motorcycle"></i>
+          <span>Rider: {{ order.riderId }}</span>
+        </div>
+      </div>
+
+      <!-- Pickup OTP (when order is ready) -->
+      <div class="ord-otp" *ngIf="shouldShowPickupOtp(order)">
+        <span class="ord-otp-lbl">
+          <i class="fas fa-shield-alt"></i> Pickup OTP
+        </span>
+        <span class="ord-otp-code" *ngIf="order.pickupOtp">{{ order.pickupOtp }}</span>
+        <span class="ord-otp-na" *ngIf="!order.pickupOtp">N/A</span>
+      </div>
+
+      <!-- Footer: amount + action buttons -->
+      <div class="ord-footer">
+        <div class="ord-amount">
+          <div class="ord-amount-sub">
+            <span>Food: ₹{{ order.foodTotal }}</span>
+            <span>Del: ₹{{ order.deliveryFee }}</span>
+          </div>
+          <div class="ord-total">₹{{ order.grandTotal }}</div>
+        </div>
+
+        <div class="ord-actions">
+          <button
+            *ngIf="order.status === OrderStatus.CONFIRMED"
+            class="ord-btn ord-btn-accept"
+            (click)="acceptOrder(order); $event.stopPropagation()">
+            <i class="fas fa-check"></i> Accept
+          </button>
+          <button
+            *ngIf="order.status === OrderStatus.CONFIRMED"
+            class="ord-btn ord-btn-reject"
+            (click)="rejectOrder(order); $event.stopPropagation()">
+            <i class="fas fa-times"></i> Reject
+          </button>
+          <button
+            *ngIf="order.status === OrderStatus.ACCEPTED || order.status === OrderStatus.PREPARING"
+            class="ord-btn ord-btn-ready"
+            (click)="markReady(order); $event.stopPropagation()">
+            <i class="fas fa-check-double"></i> Mark Ready
+          </button>
+        </div>
+
+        <div class="ord-cancel-reason"
+          *ngIf="order.status === OrderStatus.CANCELLED && order.cancellationReason">
+          <i class="fas fa-info-circle"></i>
+          <span>{{ order.cancellationReason }}</span>
+        </div>
+      </div>
+
+    </div><!-- /ord-card -->
+
+    <!-- Empty state -->
+    <div class="ord-empty" *ngIf="getOrders().length === 0">
+      <i class="fas fa-inbox"></i>
+      <p>No {{ activeTab }} orders</p>
+    </div>
+
+  </div><!-- /ord-grid -->
+
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Detail Modal — outside .ord-root so position:fixed works
+═══════════════════════════════════════════════════════════════════════ -->
+<div class="ord-modal-bg" *ngIf="expandedOrder" (click)="closeExpandedOrder()">
+    <div class="ord-modal" (click)="$event.stopPropagation()" [attr.data-status]="expandedOrder.status">
+
+      <!-- ── Status Banner ──────────────────────────────────────────────── -->
+      <div class="ord-modal-banner" [attr.data-status]="expandedOrder.status">
+        <div class="ord-modal-banner-left">
+          <span class="ord-modal-status-dot" [attr.data-status]="expandedOrder.status"></span>
+          <span class="ord-modal-status-text">{{ getStatusLabel(expandedOrder.status) }}</span>
+        </div>
+        <div class="ord-modal-banner-right">
+          <span class="ord-modal-time-chip">
+            <i class="fas fa-clock"></i> {{ getRelativeTime(expandedOrder.createdAt) }}
+          </span>
+        </div>
+        <button class="ord-modal-close" (click)="closeExpandedOrder()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <!-- ── Order Meta Bar ─────────────────────────────────────────────── -->
+      <div class="ord-modal-meta-bar">
+        <div class="ord-modal-meta-cell">
+          <span class="ord-modal-meta-lbl">Order ID</span>
+          <span class="ord-modal-meta-val mono">{{ expandedOrder.orderId }}</span>
+        </div>
+        <div class="ord-modal-meta-divider"></div>
+        <div class="ord-modal-meta-cell">
+          <span class="ord-modal-meta-lbl">Customer</span>
+          <span class="ord-modal-meta-val">
+            <i class="fas fa-phone"></i> {{ expandedOrder.customerPhone }}
+          </span>
+        </div>
+        <div class="ord-modal-meta-divider" *ngIf="expandedOrder.riderId"></div>
+        <div class="ord-modal-meta-cell" *ngIf="expandedOrder.riderId">
+          <span class="ord-modal-meta-lbl">Rider</span>
+          <span class="ord-modal-meta-val">
+            <i class="fas fa-motorcycle"></i> {{ expandedOrder.riderId }}
+          </span>
+        </div>
+      </div>
+
+      <!-- ── Scroll body ────────────────────────────────────────────────── -->
+      <div class="ord-modal-body">
+
+        <!-- Items table -->
+        <div class="ord-modal-sec">
+          <div class="ord-modal-sec-title">
+            <i class="fas fa-shopping-bag"></i> Items Ordered
+            <span class="ord-modal-item-count">{{ expandedOrder.items.length }} item{{ expandedOrder.items.length !== 1 ? 's' : '' }}</span>
+          </div>
+          <div class="ord-modal-items">
+            <div class="ord-modal-items-header">
+              <span>Dish</span>
+              <span class="center">Qty</span>
+              <span class="right">Price</span>
+              <span class="right">Total</span>
+            </div>
+            <div class="ord-modal-item" *ngFor="let item of expandedOrder.items; let odd = odd" [class.alt]="odd">
+              <span class="ord-modal-item-name">{{ item.name }}</span>
+              <span class="ord-modal-item-qty center">{{ item.quantity }}</span>
+              <span class="ord-modal-item-price right">₹{{ item.price }}</span>
+              <span class="ord-modal-item-total right">₹{{ item.price * item.quantity }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Delivery + OTP row -->
+        <div class="ord-modal-two-col">
+
+          <!-- Delivery address -->
+          <div class="ord-modal-sec ord-modal-sec-half">
+            <div class="ord-modal-sec-title">
+              <i class="fas fa-map-marker-alt"></i> Delivery Address
+            </div>
+            <div class="ord-modal-addr-box">
+              <p class="ord-modal-addr-main">{{ expandedOrder.deliveryAddress }}</p>
+              <p class="ord-modal-addr-sub" *ngIf="expandedOrder.formattedAddress">{{ expandedOrder.formattedAddress }}</p>
+            </div>
+          </div>
+
+          <!-- OTP (conditional) -->
+          <div class="ord-modal-sec ord-modal-sec-half"
+            *ngIf="expandedOrder.pickupOtp && shouldShowPickupOtp(expandedOrder)">
+            <div class="ord-modal-sec-title">
+              <i class="fas fa-shield-alt"></i> Pickup OTP
+            </div>
+            <div class="ord-modal-otp">
+              <div class="ord-modal-otp-digits">
+                <span *ngFor="let digit of expandedOrder.pickupOtp.split('')">{{ digit }}</span>
+              </div>
+              <p class="ord-modal-otp-hint">Verify with rider on arrival</p>
+            </div>
+          </div>
+
+          <!-- Cancellation reason (if cancelled) -->
+          <div class="ord-modal-sec ord-modal-sec-half"
+            *ngIf="expandedOrder.status === OrderStatus.CANCELLED && expandedOrder.cancellationReason">
+            <div class="ord-modal-sec-title">
+              <i class="fas fa-ban"></i> Cancellation Reason
+            </div>
+            <div class="ord-modal-cancel-reason">
+              <i class="fas fa-info-circle"></i>
+              {{ expandedOrder.cancellationReason }}
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Bill / Receipt -->
+        <div class="ord-modal-sec ord-modal-bill">
+          <div class="ord-modal-sec-title">
+            <i class="fas fa-receipt"></i> Bill Summary
+          </div>
+          <div class="ord-bill-rows">
+            <div class="ord-bill-line">
+              <span>Food Total</span>
+              <span>₹{{ expandedOrder.foodTotal }}</span>
+            </div>
+            <div class="ord-bill-line">
+              <span>Delivery Fee</span>
+              <span>₹{{ expandedOrder.deliveryFee }}</span>
+            </div>
+            <div class="ord-bill-line" *ngIf="expandedOrder.platformFee">
+              <span>Platform Fee</span>
+              <span>₹{{ expandedOrder.platformFee }}</span>
+            </div>
+          </div>
+          <div class="ord-bill-total">
+            <span class="ord-bill-total-lbl">Grand Total</span>
+            <span class="ord-bill-total-amt">₹{{ expandedOrder.grandTotal }}</span>
+          </div>
+        </div>
+
+      </div><!-- /ord-modal-body -->
+
+      <!-- ── Action Bar ─────────────────────────────────────────────────── -->
+      <div class="ord-modal-actions"
+        *ngIf="expandedOrder.status === OrderStatus.CONFIRMED ||
+               expandedOrder.status === OrderStatus.ACCEPTED   ||
+               expandedOrder.status === OrderStatus.PREPARING  ||
+               expandedOrder.status === OrderStatus.READY_FOR_PICKUP ||
+               expandedOrder.status === OrderStatus.OUT_FOR_DELIVERY">
+        <button
+          *ngIf="expandedOrder.status === OrderStatus.CONFIRMED"
+          class="ord-btn ord-btn-reject ord-modal-act-btn"
+          (click)="rejectOrder(expandedOrder); closeExpandedOrder()">
+          <i class="fas fa-times-circle"></i> Reject Order
+        </button>
+        <button
+          *ngIf="expandedOrder.status === OrderStatus.CONFIRMED"
+          class="ord-btn ord-btn-accept ord-modal-act-btn primary"
+          (click)="acceptOrder(expandedOrder); closeExpandedOrder()">
+          <i class="fas fa-check-circle"></i> Accept Order
+        </button>
+        <button
+          *ngIf="expandedOrder.status === OrderStatus.ACCEPTED || expandedOrder.status === OrderStatus.PREPARING"
+          class="ord-btn ord-btn-ready ord-modal-act-btn primary"
+          (click)="markReady(expandedOrder); closeExpandedOrder()">
+          <i class="fas fa-check-double"></i> Mark Ready for Pickup
+        </button>
+        <button
+          *ngIf="expandedOrder.status === OrderStatus.READY_FOR_PICKUP"
+          class="ord-btn ord-btn-delivery ord-modal-act-btn primary"
+          (click)="markOutForDelivery(expandedOrder); closeExpandedOrder()">
+          <i class="fas fa-motorcycle"></i> Out for Delivery
+        </button>
+        <button
+          *ngIf="expandedOrder.status === OrderStatus.OUT_FOR_DELIVERY"
+          class="ord-btn ord-btn-complete ord-modal-act-btn primary"
+          (click)="markDelivered(expandedOrder); closeExpandedOrder()">
+          <i class="fas fa-check-circle"></i> Mark Delivered
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+<!-- Rejection Modal -->
+<app-order-rejection-modal
+  [isVisible]="showRejectionModal"
+  (reject)="onRejectConfirm($event)"
+  (cancel)="onRejectCancel()"
+></app-order-rejection-modal>

@@ -1,0 +1,277 @@
+<div class="db-root">
+
+  <!-- ════ HEADER ════ -->
+  <div class="db-header">
+    <div class="db-header-left">
+      <p class="db-greeting">{{ greeting }}</p>
+      <h1 class="db-title">Dashboard</h1>
+      <p class="db-date">{{ todayDate }}</p>
+    </div>
+    <div class="db-header-right">
+      <button class="db-btn-secondary" (click)="loadData()">
+        <i class="fas fa-rotate-right"></i>
+        <span>Refresh</span>
+      </button>
+      <button class="db-btn-primary" (click)="openFinancialDashboard()">
+        <i class="fas fa-chart-line"></i>
+        <span>Financial Report</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ════ LOADING ════ -->
+  <div class="db-loading" *ngIf="isLoading">
+    <div class="db-spinner"></div>
+    <p>Loading your dashboard…</p>
+  </div>
+
+  <!-- ════ STATS ════ -->
+  <div class="db-stats" *ngIf="!isLoading && stats">
+
+    <div class="db-stat db-stat--orders">
+      <div class="db-stat-top">
+        <span class="db-stat-label">Today's Orders</span>
+        <div class="db-stat-icon db-stat-icon--red">
+          <i class="fas fa-bag-shopping"></i>
+        </div>
+      </div>
+      <div class="db-stat-value">{{ stats.todayOrders }}</div>
+      <div class="db-stat-change"
+           [class.db-stat-change--up]="stats.ordersChangePercent > 0"
+           [class.db-stat-change--down]="stats.ordersChangePercent < 0"
+           [class.db-stat-change--neutral]="stats.ordersChangePercent === 0">
+        <i class="fas"
+           [class.fa-arrow-trend-up]="stats.ordersChangePercent > 0"
+           [class.fa-circle-minus]="stats.ordersChangePercent === 0"
+           [class.fa-arrow-trend-down]="stats.ordersChangePercent < 0"></i>
+        <span>{{ Math.abs(stats.ordersChangePercent) }}% vs yesterday</span>
+      </div>
+    </div>
+
+    <div class="db-stat db-stat--revenue">
+      <div class="db-stat-top">
+        <span class="db-stat-label">Today's Revenue</span>
+        <div class="db-stat-icon db-stat-icon--green">
+          <i class="fas fa-indian-rupee-sign"></i>
+        </div>
+      </div>
+      <div class="db-stat-value">₹{{ stats.todayRevenue | number }}</div>
+      <div class="db-stat-change"
+           [class.db-stat-change--up]="stats.revenueChangePercent > 0"
+           [class.db-stat-change--down]="stats.revenueChangePercent < 0"
+           [class.db-stat-change--neutral]="stats.revenueChangePercent === 0">
+        <i class="fas"
+           [class.fa-arrow-trend-up]="stats.revenueChangePercent > 0"
+           [class.fa-circle-minus]="stats.revenueChangePercent === 0"
+           [class.fa-arrow-trend-down]="stats.revenueChangePercent < 0"></i>
+        <span>{{ Math.abs(stats.revenueChangePercent) }}% vs yesterday</span>
+      </div>
+    </div>
+
+    <div class="db-stat db-stat--avg">
+      <div class="db-stat-top">
+        <span class="db-stat-label">Avg. Order Value</span>
+        <div class="db-stat-icon db-stat-icon--yellow">
+          <i class="fas fa-chart-simple"></i>
+        </div>
+      </div>
+      <div class="db-stat-value">₹{{ stats.avgOrderValue }}</div>
+      <div class="db-stat-change"
+           [class.db-stat-change--up]="stats.avgOrderValueChangePercent > 0"
+           [class.db-stat-change--down]="stats.avgOrderValueChangePercent < 0"
+           [class.db-stat-change--neutral]="stats.avgOrderValueChangePercent === 0">
+        <i class="fas"
+           [class.fa-arrow-trend-up]="stats.avgOrderValueChangePercent > 0"
+           [class.fa-circle-minus]="stats.avgOrderValueChangePercent === 0"
+           [class.fa-arrow-trend-down]="stats.avgOrderValueChangePercent < 0"></i>
+        <span>{{ Math.abs(stats.avgOrderValueChangePercent) }}% vs yesterday</span>
+      </div>
+    </div>
+
+    <div class="db-stat db-stat--pending">
+      <div class="db-stat-top">
+        <span class="db-stat-label">Pending Orders</span>
+        <div class="db-stat-icon db-stat-icon--orange">
+          <i class="fas fa-clock"></i>
+        </div>
+      </div>
+      <div class="db-stat-value">{{ stats.pendingOrders }}</div>
+      <div class="db-stat-change db-stat-change--neutral">
+        <i class="fas fa-circle-info"></i>
+        <span>Awaiting action</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════ MIDDLE GRID: Chart + Pipeline ════ -->
+  <div class="db-mid-grid" *ngIf="!isLoading">
+
+    <!-- Revenue chart -->
+    <div class="db-card db-chart-card">
+      <div class="db-card-header">
+        <div>
+          <p class="db-card-eyebrow">Weekly Performance</p>
+          <h3 class="db-card-title">Revenue Overview</h3>
+        </div>
+        <div class="db-chart-tabs">
+          <button class="db-tab db-tab--active" type="button">7D</button>
+          <button class="db-tab" type="button">30D</button>
+          <button class="db-tab" type="button">90D</button>
+        </div>
+      </div>
+      <div class="db-bar-chart">
+        <div class="db-bar-col" *ngFor="let h of chartBars; let i = index">
+          <div class="db-bar" [style.height.%]="h"></div>
+          <span class="db-bar-label">{{ chartLabels[i] }}</span>
+        </div>
+      </div>
+      <div class="db-chart-footer">
+        <i class="fas fa-chart-area"></i>
+        <span>Live chart integration coming soon</span>
+      </div>
+    </div>
+
+    <!-- Order pipeline + quick actions -->
+    <div class="db-card db-pipeline-card">
+      <div class="db-card-header">
+        <div>
+          <p class="db-card-eyebrow">Live Status</p>
+          <h3 class="db-card-title">Order Pipeline</h3>
+        </div>
+      </div>
+      <div class="db-pipeline">
+        <div class="db-pipe-stage db-pipe-stage--new">
+          <div class="db-pipe-count">{{ stats?.pendingOrders ?? 0 }}</div>
+          <div class="db-pipe-bar"></div>
+          <div class="db-pipe-label">New</div>
+        </div>
+        <div class="db-pipe-stage db-pipe-stage--prep">
+          <div class="db-pipe-count">—</div>
+          <div class="db-pipe-bar"></div>
+          <div class="db-pipe-label">Preparing</div>
+        </div>
+        <div class="db-pipe-stage db-pipe-stage--ready">
+          <div class="db-pipe-count">—</div>
+          <div class="db-pipe-bar"></div>
+          <div class="db-pipe-label">Ready</div>
+        </div>
+        <div class="db-pipe-stage db-pipe-stage--done">
+          <div class="db-pipe-count">{{ stats?.todayOrders ?? 0 }}</div>
+          <div class="db-pipe-bar"></div>
+          <div class="db-pipe-label">Done Today</div>
+        </div>
+      </div>
+
+      <div class="db-qa-section">
+        <p class="db-qa-title">Quick Actions</p>
+        <a href="/dashboard/orders" class="db-qa-row">
+          <div class="db-qa-icon"><i class="fas fa-list-check"></i></div>
+          <span>Manage Orders</span>
+          <i class="fas fa-chevron-right db-qa-arrow"></i>
+        </a>
+        <a href="/dashboard/menu" class="db-qa-row">
+          <div class="db-qa-icon"><i class="fas fa-utensils"></i></div>
+          <span>Edit Menu</span>
+          <i class="fas fa-chevron-right db-qa-arrow"></i>
+        </a>
+        <a href="/dashboard/reviews" class="db-qa-row">
+          <div class="db-qa-icon"><i class="fas fa-star"></i></div>
+          <span>View Reviews</span>
+          <i class="fas fa-chevron-right db-qa-arrow"></i>
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════ RECENT ORDERS TABLE ════ -->
+  <div class="db-card db-orders-card" *ngIf="!isLoading">
+    <div class="db-card-header">
+      <div>
+        <p class="db-card-eyebrow">Latest Activity</p>
+        <h3 class="db-card-title">Recent Orders</h3>
+      </div>
+      <a href="/dashboard/orders" class="db-view-all">
+        View all <i class="fas fa-arrow-right"></i>
+      </a>
+    </div>
+
+    <!-- Empty state -->
+    <div class="db-empty" *ngIf="recentOrders.length === 0">
+      <i class="fas fa-receipt"></i>
+      <p>No orders yet today</p>
+    </div>
+
+    <!-- Table (tablet and up) -->
+    <div class="db-table-wrap" *ngIf="recentOrders.length > 0">
+      <table class="db-table">
+        <thead>
+          <tr>
+            <th>Order #</th>
+            <th>Customer</th>
+            <th>Items</th>
+            <th>Time</th>
+            <th>Amount</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let order of recentOrders">
+            <td class="db-td-order">{{ order.orderNumber }}</td>
+            <td class="db-td-customer">{{ order.customerName }}</td>
+            <td class="db-td-meta">{{ order.items }} items</td>
+            <td class="db-td-meta">{{ order.time }}</td>
+            <td class="db-td-amount">₹{{ order.amount }}</td>
+            <td>
+              <span class="db-badge" [ngClass]="getStatusClass(order.status)">
+                {{ getStatusLabel(order.status) }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile accordion (mobile only) -->
+    <div class="db-accordion" *ngIf="recentOrders.length > 0">
+      <div class="db-acc-item"
+           *ngFor="let order of recentOrders"
+           [class.db-acc-item--open]="expandedOrderId === order.orderNumber"
+           (click)="toggleAccordion(order.orderNumber)">
+        <div class="db-acc-header">
+          <div class="db-acc-left">
+            <span class="db-acc-order">{{ order.orderNumber }}</span>
+            <span class="db-acc-customer">{{ order.customerName }}</span>
+          </div>
+          <div class="db-acc-right">
+            <span class="db-badge" [ngClass]="getStatusClass(order.status)">
+              {{ getStatusLabel(order.status) }}
+            </span>
+            <i class="fas fa-chevron-down db-acc-chevron"></i>
+          </div>
+        </div>
+        <div class="db-acc-body">
+          <div class="db-acc-rows">
+            <div class="db-acc-row">
+              <span class="db-acc-key">Amount</span>
+              <span class="db-acc-val db-acc-val--amount">₹{{ order.amount }}</span>
+            </div>
+            <div class="db-acc-row">
+              <span class="db-acc-key">Items</span>
+              <span class="db-acc-val">{{ order.items }} items</span>
+            </div>
+            <div class="db-acc-row">
+              <span class="db-acc-key">Time</span>
+              <span class="db-acc-val">{{ order.time }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Financial Dashboard Modal -->
+  <app-financial-dashboard-modal></app-financial-dashboard-modal>
+
+</div>

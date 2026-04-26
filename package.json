@@ -1,0 +1,88 @@
+{
+  "name": "yumdude-restaurant",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "electron": "ng build --configuration development --base-href ./ && electron .",
+    "electron:dev": "electron .",
+    "dist": "ng build --base-href ./ && electron-builder --win",
+    "start:device": "node_modules\\.bin\\ng serve --host 0.0.0.0 --port 4200",
+    "build": "ng build",
+    "build:prod": "ng build --configuration production",
+    "cap:sync": "npm run build:prod && npx cap sync",
+    "cap:run": "npm run build:prod && npx cap sync && npx cap run android",
+    "dev": "npx cap run android --live-reload --host localhost --port 4200 --forwardPorts 4200:4200",
+    "cap:android": "npm run build:prod && npx cap sync && npx cap open android",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true,
+    "overrides": [
+      {
+        "files": "*.html",
+        "options": {
+          "parser": "angular"
+        }
+      }
+    ]
+  },
+  "main": "main.js",
+  "private": true,
+  "packageManager": "npm@11.6.2",
+  "dependencies": {
+    "@angular/animations": "^21.0.6",
+    "@angular/common": "^21.0.0",
+    "@angular/compiler": "^21.0.0",
+    "@angular/core": "^21.0.0",
+    "@angular/forms": "^21.0.0",
+    "@angular/platform-browser": "^21.0.0",
+    "@angular/router": "^21.0.0",
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0",
+    "@capacitor/push-notifications": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.1",
+    "@e-is/capacitor-bluetooth-serial": "^6.0.3",
+    "@stomp/stompjs": "^7.2.1",
+    "rxjs": "~7.8.0",
+    "sockjs-client": "^1.6.1",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^21.0.4",
+    "@angular/cli": "^21.0.4",
+    "@angular/compiler-cli": "^21.0.0",
+    "@types/sockjs-client": "^1.5.4",
+    "jsdom": "^27.1.0",
+    "typescript": "~5.9.2",
+    "vitest": "^4.0.8",
+    "electron": "^41.0.3",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.yumdude.restaurant",
+    "productName": "YumDude Restaurant",
+    "directories": {
+      "output": "release2"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "src/assets/icons/icon.ico",
+      "sign": null,
+      "signingHashAlgorithms": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

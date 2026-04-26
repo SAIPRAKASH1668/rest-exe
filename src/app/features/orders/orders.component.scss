@@ -1,0 +1,1293 @@
+// ============================================================
+// Orders Component
+// Premium Swiggy/Zomato partner-style order management
+// Status-bordered cards, clean tabs, invoice modal
+// ============================================================
+
+@use '../../../styles/variables' as v;
+@use '../../../styles/mixins' as *;
+
+// -- Root ----------------------------------------------------------------------
+.ord-root {
+  width: 100%;        // must be explicit � max-width alone doesn't constrain on narrow viewports
+  max-width: 1400px;
+  min-width: 0;       // allow shrinking below content width
+  overflow-x: hidden; // hard clip � prevents any child from blowing out the page width
+  animation: ordFade 0.25s ease both;
+  box-sizing: border-box;
+
+  // Compensate for the fixed tab bar being taken out of normal flow.
+  // Tab bar height: icon(~24px) + gap(~2px) + label(~12px) + vert-padding(~15px) + border(3px) � 58px.
+  // Using 3.75rem (60px) as a safe ceiling so the first card header is never obscured.
+  @include tablet { padding-top: 3.75rem; }
+  @include mobile { padding-top: 3.75rem; }
+}
+
+@keyframes ordFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+// -- Tab Bar -------------------------------------------------------------------
+.ord-tabs {
+  display: flex;
+  border-bottom: 1.5px solid #E8E5E2;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  gap: 0;
+  position: sticky;
+  top: var(--navbar-total-height);   // lock just below the fixed navbar on scroll
+  z-index: 20;
+  background: #FFFFFF;
+
+  &::-webkit-scrollbar { height: 0; }
+
+  // -- Tablet: fixed positioning so cards NEVER scroll behind the tab bar --
+  // The sticky approach causes the first card header to slip under the tabs
+  // after ~50px scroll. Fixed + padding-top compensation (see .ord-root) is
+  // the same pattern that Swiggy/Zomato partner apps use.
+  @include tablet {
+    position: fixed;
+    top: var(--navbar-total-height);
+    left: v.$sidebar-collapsed-width; // sidebar is always collapsed on tablet
+    right: 0;
+    width: auto;
+    margin-bottom: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); // subtle lift to separate from cards
+    z-index: 50;
+  }
+
+  // -- Mobile: same fix � full-width fixed tab bar --
+  @include mobile {
+    position: fixed;
+    top: var(--navbar-total-height);
+    left: 0;
+    right: 0;
+    width: 100%;
+    margin-bottom: 0;
+    padding: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    z-index: 50;
+  }
+}
+
+.ord-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.625rem 1.125rem;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1.5px;
+  color: v.$text-muted;
+  font-family: v.$font-family;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+
+  i { font-size: 0.875rem; }
+
+  span:first-of-type {
+    // tab label text � very compact on mobile, full on tablet+
+    @include mobile {
+      font-size: 0.55rem;
+      letter-spacing: 0.01em;
+      text-transform: uppercase;
+    }
+  }
+
+  .ord-badge {
+    background: #F0EEEC;
+    color: v.$text-secondary;
+    border-radius: 2px;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    min-width: 20px;
+    text-align: center;
+    transition: all 0.15s ease;
+  }
+
+  &:hover { color: v.$text-primary; }
+
+  &.active {
+    color: v.$primary-orange;
+    border-bottom-color: v.$primary-orange;
+
+    .ord-badge {
+      background: v.$primary-orange;
+      color: #FFFFFF;
+    }
+  }
+
+  // Mobile: icon-stack layout with compact label, pill-style active highlight
+  @include mobile {
+    flex: 1;                   // equal-width tabs that fill the full bar
+    padding: 0.5rem 0.25rem 0.4375rem;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    border-bottom-width: 3px;
+    min-width: 0;
+    i { font-size: 1.05rem; }
+  }
+
+  @include tablet {
+    flex: 1;                   // equal-width � 5 tabs fill the bar, none overflow
+    padding: 0.5rem 0.375rem 0.4375rem;
+    flex-direction: column;    // icon on top, compact label below (same as mobile)
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    min-width: 0;
+    i { font-size: 1.0rem; }
+
+    span:first-of-type {       // compact label � truncates if needed
+      font-size: 0.6rem;
+      letter-spacing: 0.01em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+  }
+}
+
+// -- Grid ----------------------------------------------------------------------
+.ord-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+  align-items: start;
+  width: 100%;    // explicit width so the grid fills its block container exactly
+  min-width: 0;   // allow grid to shrink � prevents content from inflating past viewport
+
+  // Tablet portrait (iPad mini/Air vertical): single-column for full card width
+  @include tablet   { grid-template-columns: 1fr; gap: 0.875rem; }
+  @include mobile   { grid-template-columns: 1fr; gap: 0.75rem; }
+}
+
+// -- Order Card ----------------------------------------------------------------
+.ord-card {
+  background: #FFFFFF;
+  border: 1px solid #E8E5E2;
+  border-radius: 3px;
+  border-left: 4px solid #D1CEC9;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s ease;
+  min-width: 0;       // CRITICAL: prevents grid item from expanding beyond its track
+  overflow: hidden;   // clips any internal content that escapes the card boundary
+
+  &:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07); }
+
+  @include mobile  { box-shadow: 0 2px 10px rgba(46, 36, 27, 0.07); }
+  @include tablet  { box-shadow: 0 2px 12px rgba(46, 36, 27, 0.07); }
+
+  // Status-coded left border (like Swiggy partner app)
+  &[data-status="PENDING"]           { border-left-color: #F59E0B; }
+  &[data-status="CONFIRMED"]         { border-left-color: #3B82F6; }
+  &[data-status="ACCEPTED"],
+  &[data-status="PREPARING"]         { border-left-color: #8B5CF6; }
+  &[data-status="READY"],
+  &[data-status="READY_FOR_PICKUP"]  { border-left-color: #10B981; }
+  &[data-status="OUT_FOR_DELIVERY"]  { border-left-color: #06B6D4; }
+  &[data-status="DELIVERED"]         { border-left-color: #9CA3AF; }
+  &[data-status="CANCELLED"]         { border-left-color: #EF4444; }
+}
+
+// -- Card Header ---------------------------------------------------------------
+.ord-head {
+  padding: 0.875rem 0.875rem 0.625rem;
+  border-bottom: 1px solid #F0EEEC;
+
+  @include mobile { padding: 1rem 1rem 0.75rem; }
+  @include tablet { padding: 1rem 1rem 0.75rem; }
+}
+
+.ord-id-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.ord-id {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: v.$text-primary;
+  font-family: 'Courier New', monospace;
+  margin: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.ord-icon-btn {
+  background: transparent;
+  border: 1px solid #E8E5E2;
+  border-radius: 2px;
+  color: v.$text-muted;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  transition: all 0.12s ease;
+
+  &:hover {
+    border-color: v.$primary-orange;
+    color: v.$primary-orange;
+    background: rgba(232, 58, 58, 0.04);
+  }
+
+  @include mobile { width: 32px; height: 32px; font-size: 0.75rem; border-radius: 3px; }
+  @include tablet { width: 30px; height: 30px; font-size: 0.7rem; }
+}
+
+.ord-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ord-phone {
+  font-size: 0.75rem;
+  color: v.$text-secondary;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+
+  i { font-size: 0.625rem; color: v.$text-muted; }
+}
+
+.ord-time {
+  font-size: 0.75rem;
+  color: v.$text-muted;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-right: auto;   // pushes status pill to far right on desktop
+
+  // Mobile/tablet: pill is hidden so no need to push anything; keep text flush
+  @include mobile { margin-right: 0; }
+  @include tablet { margin-right: 0; }
+
+  i { font-size: 0.625rem; }
+}
+
+// -- Status Pill (shared: card + modal) ---------------------------------------
+.ord-status-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+
+  // Hidden on mobile/tablet � the active tab + left border colour already
+  // communicate status; showing it here only causes overflow on narrow cards
+  @include mobile { display: none; }
+  @include tablet { display: none; }
+
+  &[data-status="PENDING"] {
+    background: rgba(245,158,11,0.1);   color: #92400E; border-color: rgba(245,158,11,0.25);
+  }
+  &[data-status="CONFIRMED"] {
+    background: rgba(59,130,246,0.1);   color: #1E40AF; border-color: rgba(59,130,246,0.25);
+  }
+  &[data-status="ACCEPTED"],
+  &[data-status="PREPARING"] {
+    background: rgba(139,92,246,0.1);   color: #5B21B6; border-color: rgba(139,92,246,0.25);
+  }
+  &[data-status="READY"],
+  &[data-status="READY_FOR_PICKUP"] {
+    background: rgba(16,185,129,0.1);   color: #065F46; border-color: rgba(16,185,129,0.25);
+  }
+  &[data-status="OUT_FOR_DELIVERY"] {
+    background: rgba(6,182,212,0.1);    color: #0E7490; border-color: rgba(6,182,212,0.25);
+  }
+  &[data-status="DELIVERED"] {
+    background: rgba(107,114,128,0.1);  color: #374151; border-color: rgba(107,114,128,0.25);
+  }
+  &[data-status="CANCELLED"] {
+    background: rgba(239,68,68,0.1);    color: #991B1B; border-color: rgba(239,68,68,0.25);
+  }
+}
+
+// -- Items Section -------------------------------------------------------------
+.ord-items {
+  padding: 0.625rem 0.875rem;
+  background: #FAFAF9;
+  border-bottom: 1px solid #F0EEEC;
+  height: 148px;       // fixed height � keeps all cards equal regardless of item count
+  overflow: hidden;
+
+  // Mobile/tablet: let items breathe naturally � no fixed clip height
+  @include mobile { height: auto; overflow: visible; }
+  @include tablet { height: auto; overflow: visible; }
+}
+
+.ord-items-lbl {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: v.$text-muted;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.4rem;
+}
+
+.ord-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid #F0EEEC;
+
+  &:last-of-type { border-bottom: none; }
+}
+
+.ord-item-name {
+  font-size: 0.8125rem;
+  color: v.$text-secondary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 0.5rem;
+  line-height: 1.35;
+}
+
+.ord-item-qty {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: v.$primary-orange;
+  white-space: nowrap;
+}
+
+.ord-see-more {
+  background: transparent;
+  border: none;
+  color: v.$primary-orange;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.3rem 0 0;
+  font-family: v.$font-family;
+  transition: color 0.12s ease;
+  text-decoration: underline;
+
+  &:hover { color: v.$accent-orange; text-decoration: none; }
+}
+
+// -- Delivery ------------------------------------------------------------------
+.ord-delivery {
+  padding: 0.5rem 0.875rem 0.375rem;
+}
+
+.ord-addr-row,
+.ord-rider-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  font-size: 0.78rem;
+  color: v.$text-secondary;
+  line-height: 1.4;
+  min-width: 0;   // CRITICAL: allows the flex item to shrink so -webkit-line-clamp works
+
+  i {
+    font-size: 0.6875rem;
+    color: v.$text-muted;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  span {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    min-width: 0;  // required so the long address text doesn't force card width wider
+  }
+}
+
+.ord-rider-row {
+  margin-top: 0.25rem;
+  i { color: v.$primary-orange; }
+}
+
+// -- OTP -----------------------------------------------------------------------
+.ord-otp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.5rem 0.875rem 0;
+  padding: 0.5rem 0.75rem;
+  background: #FFFBEB;
+  border: 1.5px dashed #F59E0B;
+  border-radius: 2px;
+}
+
+.ord-otp-lbl {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #92400E;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  i { font-size: 0.75rem; }
+}
+
+.ord-otp-code {
+  font-family: 'Courier New', monospace;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: v.$text-primary;
+  letter-spacing: 0.25rem;
+}
+
+.ord-otp-na {
+  font-size: 0.75rem;
+  color: v.$text-muted;
+}
+
+// -- Card Footer ---------------------------------------------------------------
+.ord-footer {
+  padding: 0.75rem 0.875rem 0.875rem;
+  border-top: 1px solid #F0EEEC;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+
+  @include mobile { padding: 0.875rem; gap: 0.75rem; }
+  @include tablet { padding: 0.875rem 1rem; gap: 0.75rem; }
+}
+
+.ord-amount {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  min-width: 0;  // allow flex children to shrink
+  gap: 0.5rem;
+}
+
+.ord-amount-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.72rem;
+  color: v.$text-muted;
+  min-width: 0;
+  flex: 1;
+}
+
+.ord-total {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: v.$text-primary;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;  // never let the total be crushed or wrapped
+}
+
+.ord-actions {
+  display: flex;
+  gap: 0.5rem;
+
+  @include mobile { gap: 0.625rem; }
+}
+
+// -- Action Buttons ------------------------------------------------------------
+.ord-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5625rem 0.75rem;
+  border-radius: 2px;
+  font-family: v.$font-family;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: none;
+  white-space: nowrap;
+
+  i { font-size: 0.75rem; }
+
+  // Premium touch targets on mobile/tablet
+  @include mobile {
+    min-height: 48px;
+    font-size: 0.8125rem;
+    border-radius: 3px;
+  }
+
+  @include tablet {
+    min-height: 44px;
+    font-size: 0.8125rem;
+  }
+}
+
+.ord-btn-accept {
+  background: #10B981;
+  color: #FFFFFF;
+  box-shadow: 0 2px 0 #059669;
+
+  &:hover  { background: #059669; }
+  &:active { transform: translateY(2px); box-shadow: none; }
+}
+
+.ord-btn-reject {
+  background: #FFFFFF;
+  color: #DC2626;
+  border: 1.5px solid #DC2626;
+
+  &:hover { background: #DC2626; color: #FFFFFF; }
+}
+
+.ord-btn-ready {
+  background: v.$primary-orange;
+  color: #FFFFFF;
+  box-shadow: 0 2px 0 v.$dark-orange;
+
+  &:hover  { background: v.$accent-orange; }
+  &:active { transform: translateY(2px); box-shadow: none; }
+}
+
+.ord-btn-delivery {
+  background: #06B6D4;
+  color: #FFFFFF;
+  box-shadow: 0 2px 0 #0891B2;
+
+  &:hover  { background: #0891B2; }
+  &:active { transform: translateY(2px); box-shadow: none; }
+}
+
+.ord-btn-complete {
+  background: #10B981;
+  color: #FFFFFF;
+  box-shadow: 0 2px 0 #059669;
+
+  &:hover  { background: #059669; }
+  &:active { transform: translateY(2px); box-shadow: none; }
+}
+
+.ord-cancel-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: #DC2626;
+  padding: 0.375rem 0.5rem;
+  background: rgba(239, 68, 68, 0.06);
+  border-left: 2px solid #EF4444;
+  border-radius: 0 2px 2px 0;
+
+  i { flex-shrink: 0; margin-top: 1px; }
+  span { line-height: 1.35; }
+}
+
+// -- Loading + Empty -----------------------------------------------------------
+.ord-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 4rem 2rem;
+  color: v.$text-muted;
+
+  p { font-size: 0.875rem; margin: 0; }
+}
+
+.ord-spinner {
+  width: 30px;
+  height: 30px;
+  border: 2px solid #E8E5E2;
+  border-top-color: v.$primary-orange;
+  border-radius: 50%;
+  animation: ordSpin 0.7s linear infinite;
+}
+
+@keyframes ordSpin { to { transform: rotate(360deg); } }
+
+.ord-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 4rem 2rem;
+  text-align: center;
+
+  i { font-size: 2.5rem; color: #C8C4C0; }
+  p {
+    font-size: 0.9375rem;
+    color: v.$text-secondary;
+    font-weight: 500;
+    margin: 0;
+    text-transform: capitalize;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Detail Modal � Premium Receipt Redesign
+// ----------------------------------------------------------------------------
+
+.ord-modal-bg {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: v.$sidebar-width;  // exclude sidebar from backdrop
+  background: rgba(10, 4, 4, 0.62);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: ordFadeIn 0.18s ease;
+
+  // Tablet: sidebar is collapsed to 70px
+  @include tablet {
+    left: v.$sidebar-collapsed-width;
+    padding: 1.25rem;
+  }
+
+  // Mobile: full-screen bottom sheet
+  @include mobile {
+    left: 0;
+    align-items: flex-end;
+    padding: 0;
+  }
+}
+
+@keyframes ordFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.ord-modal {
+  background: #FFFFFF;
+  border-radius: 4px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24), 0 4px 16px rgba(0,0,0,0.12);
+  animation: ordModalIn 0.22s cubic-bezier(0.34, 1.22, 0.64, 1);
+
+  @include tablet {
+    max-width: 600px;
+    max-height: 90vh;
+  }
+
+  @include mobile {
+    max-height: 94vh;
+    border-radius: 12px 12px 0 0; // premium bottom-sheet style
+    animation: ordSheetIn 0.28s cubic-bezier(0.34, 1.1, 0.64, 1);
+  }
+}
+
+@keyframes ordSheetIn {
+  from { transform: translateY(100%); opacity: 0.6; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+@keyframes ordModalIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+// -- Status Banner (colored top bar) ------------------------------------------
+.ord-modal-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem 1.375rem;
+  flex-shrink: 0;
+  position: relative;
+
+  &[data-status="CONFIRMED"]                          { background: rgba(59,130,246,0.1);   border-top: 4px solid #3B82F6; }
+  &[data-status="ACCEPTED"], &[data-status="PREPARING"]  { background: rgba(139,92,246,0.1);   border-top: 4px solid #8B5CF6; }
+  &[data-status="READY_FOR_PICKUP"],
+  &[data-status="AWAITING_RIDER_ASSIGNMENT"],
+  &[data-status="OFFERED_TO_RIDER"],
+  &[data-status="RIDER_ASSIGNED"]                     { background: rgba(16,185,129,0.1);   border-top: 4px solid #10B981; }
+  &[data-status="OUT_FOR_DELIVERY"],
+  &[data-status="PICKED_UP"]                          { background: rgba(6,182,212,0.1);    border-top: 4px solid #06B6D4; }
+  &[data-status="DELIVERED"]                          { background: rgba(107,114,128,0.08); border-top: 4px solid #9CA3AF; }
+  &[data-status="CANCELLED"]                          { background: rgba(239,68,68,0.08);   border-top: 4px solid #EF4444; }
+  &[data-status="PENDING"]                            { background: rgba(245,158,11,0.08);  border-top: 4px solid #F59E0B; }
+}
+
+.ord-modal-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.ord-modal-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &[data-status="CONFIRMED"]         { background: #3B82F6; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+  &[data-status="ACCEPTED"],
+  &[data-status="PREPARING"]         { background: #8B5CF6; box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
+  &[data-status="READY_FOR_PICKUP"],
+  &[data-status="AWAITING_RIDER_ASSIGNMENT"],
+  &[data-status="OFFERED_TO_RIDER"],
+  &[data-status="RIDER_ASSIGNED"]    { background: #10B981; box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
+  &[data-status="OUT_FOR_DELIVERY"],
+  &[data-status="PICKED_UP"]         { background: #06B6D4; box-shadow: 0 0 0 3px rgba(6,182,212,0.2); }
+  &[data-status="DELIVERED"]         { background: #9CA3AF; }
+  &[data-status="CANCELLED"]         { background: #EF4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.2); }
+  &[data-status="PENDING"]           { background: #F59E0B; box-shadow: 0 0 0 3px rgba(245,158,11,0.2); }
+}
+
+.ord-modal-status-text {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: v.$text-primary;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ord-modal-banner-right { margin-left: auto; padding-right: 2.5rem; }
+
+.ord-modal-time-chip {
+  font-size: 0.75rem;
+  color: v.$text-secondary;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  i { font-size: 0.7rem; }
+}
+
+.ord-modal-close {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.06);
+  border: none;
+  border-radius: 3px;
+  color: v.$text-secondary;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  transition: all 0.12s ease;
+
+  &:hover { background: rgba(0,0,0,0.12); color: v.$text-primary; }
+}
+
+// -- Meta Bar: order ID | phone | rider ----------------------------------------
+.ord-modal-meta-bar {
+  display: flex;
+  align-items: stretch;
+  padding: 0.75rem 1.375rem;
+  border-bottom: 1px solid #E8E5E2;
+  flex-shrink: 0;
+  gap: 0;
+  background: #FAFAF9;
+  flex-wrap: wrap;
+
+  // Mobile: stack cells into a 2-col grid for quick scanning
+  @include mobile {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    padding: 0.875rem;
+
+    // Hide vertical dividers � not needed in grid layout
+    .ord-modal-meta-divider { display: none; }
+
+    .ord-modal-meta-cell {
+      padding: 0;
+      flex: unset;
+    }
+  }
+}
+
+.ord-modal-meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.25rem 1.125rem 0.25rem 0;
+  flex: 1;
+  min-width: 0;
+
+  &:first-child { padding-left: 0; }
+}
+
+.ord-modal-meta-divider {
+  width: 1px;
+  background: #E8E5E2;
+  margin: 0.25rem 1.125rem 0.25rem 0;
+  flex-shrink: 0;
+}
+
+.ord-modal-meta-lbl {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: v.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.ord-modal-meta-val {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: v.$text-primary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+
+  &.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  i { font-size: 0.7rem; color: v.$text-muted; }
+}
+
+// -- Scrollable body -----------------------------------------------------------
+.ord-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb { background: #D8D5D1; }
+}
+
+// -- Generic section -----------------------------------------------------------
+.ord-modal-sec {
+  padding: 1rem 1.375rem;
+  border-bottom: 1px solid #F0EEEC;
+
+  &:last-child { border-bottom: none; }
+}
+
+.ord-modal-sec-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: v.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin: 0 0 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+
+  i { color: v.$primary-orange; font-size: 0.75rem; }
+}
+
+.ord-modal-item-count {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: v.$text-muted;
+  background: #F0EEEC;
+  border-radius: 2px;
+  padding: 1px 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+// -- Items table ---------------------------------------------------------------
+.ord-modal-items {
+  border: 1px solid #E8E5E2;
+  border-radius: 3px;
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+
+.ord-modal-items-header {
+  display: grid;
+  grid-template-columns: 1fr 52px 80px 80px;
+  padding: 0.5rem 0.875rem;
+  background: #F5F3F0;
+  border-bottom: 1px solid #E8E5E2;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: v.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+
+  .center { text-align: center; }
+  .right  { text-align: right; }
+}
+
+.ord-modal-item {
+  display: grid;
+  grid-template-columns: 1fr 52px 80px 80px;
+  align-items: center;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid #F0EEEC;
+  transition: background 0.1s ease;
+
+  &:last-child { border-bottom: none; }
+  &.alt { background: #FAFAF9; }
+  &:hover { background: #F5F3F0; }
+
+  .center { text-align: center; }
+  .right  { text-align: right; }
+}
+
+.ord-modal-item-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: v.$text-primary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 0.5rem;
+}
+
+.ord-modal-item-qty {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: v.$primary-orange;
+}
+
+.ord-modal-item-price {
+  font-size: 0.8125rem;
+  color: v.$text-secondary;
+  font-variant-numeric: tabular-nums;
+}
+
+.ord-modal-item-total {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: v.$text-primary;
+  font-variant-numeric: tabular-nums;
+}
+
+// -- Two-column row (delivery + OTP / cancel reason) ---------------------------
+.ord-modal-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+
+  .ord-modal-sec-half:first-child { border-right: 1px solid #F0EEEC; }
+
+  @media (max-width: 520px) {
+    grid-template-columns: 1fr;
+    .ord-modal-sec-half:first-child { border-right: none; border-bottom: 1px solid #F0EEEC; }
+  }
+}
+
+.ord-modal-sec-half {
+  padding: 1rem 1.375rem;
+  border-bottom: 1px solid #F0EEEC;
+}
+
+// Delivery address box
+.ord-modal-addr-box {
+  background: #FAFAF9;
+  border: 1px solid #E8E5E2;
+  border-radius: 3px;
+  padding: 0.75rem 0.875rem;
+}
+
+.ord-modal-addr-main {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: v.$text-primary;
+  margin: 0 0 0.25rem;
+  line-height: 1.4;
+}
+
+.ord-modal-addr-sub {
+  font-size: 0.78rem;
+  color: v.$text-secondary;
+  margin: 0;
+}
+
+// OTP � individual digit boxes
+.ord-modal-otp {
+  text-align: center;
+  background: #FFFBEB;
+  border: 1.5px dashed #F59E0B;
+  border-radius: 3px;
+  padding: 0.875rem 0.75rem;
+}
+
+.ord-modal-otp-digits {
+  display: flex;
+  gap: 0.375rem;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+
+  span {
+    width: 38px;
+    height: 48px;
+    background: #FFFFFF;
+    border: 1.5px solid #E8E5E2;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Courier New', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: v.$text-primary;
+    box-shadow: 0 2px 0 #E8E5E2;
+  }
+}
+
+.ord-modal-otp-hint {
+  font-size: 0.7rem;
+  color: #92400E;
+  margin: 0;
+}
+
+// Cancellation reason box
+.ord-modal-cancel-reason {
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 3px;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  color: #991B1B;
+  display: flex;
+  gap: 0.5rem;
+  line-height: 1.5;
+
+  i { margin-top: 0.125rem; flex-shrink: 0; font-size: 0.875rem; }
+}
+
+// -- Bill section --------------------------------------------------------------
+.ord-modal-bill {
+  background: #FAFAF9;
+  border-bottom: 1px solid #E8E5E2;
+}
+
+.ord-bill-rows {
+  border: 1px solid #E8E5E2;
+  border-radius: 3px 3px 0 0;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+.ord-bill-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5625rem 0.875rem;
+  font-size: 0.875rem;
+  color: v.$text-secondary;
+  border-bottom: 1px solid #F0EEEC;
+  background: #FFFFFF;
+
+  &:last-child { border-bottom: none; }
+
+  span:last-child {
+    font-weight: 600;
+    color: v.$text-primary;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.ord-bill-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem;
+  background: v.$text-primary;
+  border-radius: 0 0 3px 3px;
+  margin-top: 0;
+}
+
+.ord-bill-total-lbl {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ord-bill-total-amt {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  font-variant-numeric: tabular-nums;
+}
+
+// -- Action Bar ----------------------------------------------------------------
+.ord-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.375rem;
+  background: #F5F3F0;
+  border-top: 1.5px solid #E8E5E2;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  border-radius: 0 0 4px 4px;
+
+  @include mobile {
+    flex-direction: column;
+    gap: 0.625rem;
+    padding: 1rem;
+    border-radius: 0;
+    // Safe area inset for devices with a home indicator bar
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.ord-modal-act-btn {
+  flex: 1;
+  min-width: 140px;
+  padding: 0.6875rem 1rem;
+  font-size: 0.875rem;
+  justify-content: center;
+
+  &.primary { flex: 2; }
+
+  @include mobile {
+    flex: unset;
+    width: 100%;
+    min-width: unset;
+    min-height: 52px;  // premium large tap target
+    font-size: 0.9375rem;
+    border-radius: 3px;
+
+    &.primary { order: -1; }  // primary action always on top in stacked layout
+  }
+
+  @include tablet {
+    min-height: 46px;
+  }
+}
+
+// -- Printer: no-printer nudge --------------------------------------------
+.ord-printer-nudge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 1rem 0.5rem;
+  padding: 0.625rem 0.875rem;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: #7b5800;
+
+  i.fa-print { color: #f9a825; font-size: 1rem; flex-shrink: 0; }
+
+  span { flex: 1; }
+
+  .ord-printer-nudge-link {
+    white-space: nowrap;
+    color: #E8352A;
+    font-weight: 600;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8125rem;
+
+    i { font-size: 0.7rem; }
+
+    &:hover { text-decoration: underline; }
+  }
+}
+
+// Desktop/laptop only: when printer is missing, keep hierarchy clean:
+// navbar -> printer banner -> tabs
+.ord-root--no-printer {
+  @include laptop-up {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ord-printer-nudge {
+    @include laptop-up {
+      order: 1;
+      position: sticky;
+      top: var(--navbar-total-height);
+      z-index: 31;
+      margin: 0 1rem 0.5rem;
+    }
+  }
+
+  .ord-tabs {
+    @include laptop-up {
+      order: 2;
+      top: calc(var(--navbar-total-height) + 3rem);
+      z-index: 30;
+    }
+  }
+}
+
+// -- Printer: print status toast ------------------------------------------
+.ord-print-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 1rem 0.5rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  animation: ord-toast-in 0.25s ease;
+
+  i { font-size: 1rem; flex-shrink: 0; }
+
+  &--connecting, &--printing {
+    background: #fff8e1;
+    border-color: #ffe082;
+    color: #7b5800;
+    i { color: #f9a825; }
+  }
+
+  &--success {
+    background: #e8f5e9;
+    border-color: #a5d6a7;
+    color: #1b5e20;
+    i { color: #43a047; }
+  }
+
+  &--error {
+    background: #fdecea;
+    border-color: #ef9a9a;
+    color: #b71c1c;
+    i { color: #e53935; }
+  }
+}
+
+@keyframes ord-toast-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

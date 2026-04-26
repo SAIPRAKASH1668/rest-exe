@@ -1,0 +1,345 @@
+﻿<div class="menu-root">
+
+  <!-- ── Page Header ──────────────────────────────────────────────────────── -->
+  <div class="mn-header">
+    <div class="mn-header-left">
+      <h1 class="mn-title">Menu Management</h1>
+      <p class="mn-subtitle">Manage your restaurant menu items</p>
+    </div>
+    <button class="mn-btn-add" (click)="openAddItemForm()">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Add Item
+    </button>
+  </div>
+
+  <!-- ── Category Tabs ─────────────────────────────────────────────────────── -->
+  <div class="mn-cats" *ngIf="!loading">
+    <button
+      *ngFor="let category of categories"
+      class="mn-cat"
+      [class.active]="selectedCategory === category.toLowerCase()"
+      (click)="selectCategory(category)">
+      {{ category }}
+    </button>
+  </div>
+
+  <!-- ── Loading ───────────────────────────────────────────────────────────── -->
+  <div class="mn-loading" *ngIf="loading">
+    <div class="mn-spinner"></div>
+    <p>Loading menu items…</p>
+  </div>
+
+  <!-- ── Empty State ───────────────────────────────────────────────────────── -->
+  <div class="mn-empty" *ngIf="!loading && menuItems.length === 0">
+    <i class="fas fa-utensils"></i>
+    <h3>No menu items yet</h3>
+    <p>Start by adding your first menu item</p>
+    <button class="mn-btn-add" (click)="openAddItemForm()">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Add First Item
+    </button>
+  </div>
+
+  <!-- ── Menu table ─────────────────────────────────────────────────────────── -->
+  <div class="mn-table-wrap" *ngIf="!loading && getFilteredItems().length > 0">
+    <table class="mn-table">
+      <thead>
+        <tr>
+          <th class="mn-th mn-th-thumb"></th>
+          <th class="mn-th mn-th-item">Item</th>
+          <th class="mn-th mn-th-cat">Category</th>
+          <th class="mn-th mn-th-menprice">Menu Price</th>
+          <th class="mn-th mn-th-hike">Hike %</th>
+          <th class="mn-th mn-th-disprice">Cust. Price</th>
+          <th class="mn-th mn-th-avail">Available</th>
+          <th class="mn-th mn-th-act">Edit</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="mn-row" *ngFor="let item of getFilteredItems()">
+
+          <!-- Thumbnail -->
+          <td class="mn-td mn-td-thumb">
+            <div class="mn-thumb"
+              [style.background-image]="item.image?.length ? 'url(' + item.image[0] + ')' : 'none'"
+              [class.no-img]="!item.image?.length">
+              <i class="fas fa-utensils" *ngIf="!item.image?.length"></i>
+            </div>
+          </td>
+
+          <!-- Name + description -->
+          <td class="mn-td mn-td-info">
+            <div class="mn-info">
+              <div class="mn-name-row">
+                <span class="mn-veg-dot" [class.non-veg]="!item.isVeg" [title]="item.isVeg ? 'Veg' : 'Non-Veg'"></span>
+                <span class="mn-name">{{ item.itemName }}</span>
+              </div>
+              <p class="mn-desc" *ngIf="item.description">{{ item.description }}</p>
+              <p class="mn-price-meta">Menu ₹{{ item.restaurantPrice }} &middot; +{{ item.hikePercentage }}%</p>
+            </div>
+          </td>
+
+          <!-- Category -->
+          <td class="mn-td mn-td-cat">
+            <div class="mn-cat-cell">
+              <span class="mn-cat-tag">{{ item.category }}</span>
+              <span class="mn-subcat-tag" *ngIf="item.subCategory">{{ item.subCategory }}</span>
+            </div>
+          </td>
+
+          <!-- Menu Price -->
+          <td class="mn-td mn-td-menprice">
+            <div class="mn-menprice-cell">₹{{ item.restaurantPrice }}</div>
+          </td>
+
+          <!-- Hike % -->
+          <td class="mn-td mn-td-hike">
+            <div class="mn-hike-cell">{{ item.hikePercentage }}%</div>
+          </td>
+
+          <!-- Display / Customer Price -->
+          <td class="mn-td mn-td-price">
+            <div class="mn-price-cell">₹{{ item.price }}</div>
+          </td>
+
+          <!-- Availability Toggle -->
+          <td class="mn-td mn-td-avail">
+            <div class="mn-avail-cell">
+              <label class="mn-toggle" [title]="item.isAvailable ? 'Mark unavailable' : 'Mark available'">
+                <input type="checkbox" [checked]="item.isAvailable" (change)="toggleAvailability(item.itemId)" />
+                <span class="mn-track"></span>
+              </label>
+              <span class="mn-avail-label" [class.on]="item.isAvailable">
+                {{ item.isAvailable ? 'On' : 'Off' }}
+              </span>
+            </div>
+          </td>
+
+          <!-- Edit -->
+          <td class="mn-td mn-td-act">
+            <div class="mn-act-cell">
+              <button class="mn-btn-edit" (click)="openEditItemForm(item)" title="Edit item">
+                <i class="fas fa-pen"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <!-- ── No results in selected category ──────────────────────────────────── -->
+  <div class="mn-no-results" *ngIf="!loading && menuItems.length > 0 && getFilteredItems().length === 0">
+    <p>No items in this category</p>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Add / Edit Item Modal — outside .menu-root so position:fixed works
+════════════════════════════════════════════════════════════════════════ -->
+<div class="mn-modal-bg" *ngIf="showAddItemForm" (click)="closeAddItemForm()">
+    <div class="mn-modal" (click)="$event.stopPropagation()">
+
+      <!-- Modal top accent bar + header -->
+      <div class="mn-modal-accent"></div>
+      <div class="mn-modal-head">
+        <div class="mn-modal-head-left">
+          <span class="mn-modal-icon">
+            <i class="fas" [class.fa-utensils]="!isEditMode" [class.fa-pen]="isEditMode"></i>
+          </span>
+          <div>
+            <h2 class="mn-modal-title">{{ isEditMode ? 'Edit Menu Item' : 'Add New Item' }}</h2>
+            <p class="mn-modal-subtitle">{{ isEditMode ? 'Update details for this dish' : 'Fill in the details below to add a new dish' }}</p>
+          </div>
+        </div>
+        <button class="mn-modal-close" (click)="closeAddItemForm()" aria-label="Close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <form class="mn-form" (ngSubmit)="saveNewItem()">
+
+        <!-- ── Section: Dish Identity ─────────────────────────────────────── -->
+        <div class="mn-form-section">
+          <div class="mn-section-header">
+            <i class="fas fa-info-circle"></i>
+            <span>Dish Identity</span>
+          </div>
+
+          <div class="mn-fg mn-full">
+            <label>Item Name <span class="mn-req">*</span></label>
+            <input type="text" [(ngModel)]="newItem.itemName" name="name"
+              placeholder="e.g. Butter Chicken" required />
+          </div>
+
+          <div class="mn-fg mn-full">
+            <label>Description</label>
+            <textarea [(ngModel)]="newItem.description" name="description"
+              rows="2" placeholder="A brief description of the dish — flavours, ingredients…"></textarea>
+          </div>
+
+          <!-- Veg / Non-veg picker -->
+          <div class="mn-type-row">
+            <span class="mn-type-lbl">Food Type</span>
+            <div class="mn-type-toggle">
+              <button type="button" class="mn-type-btn"
+                [class.veg]="newItem.isVeg" (click)="newItem.isVeg = true">
+                <span class="mn-veg-dot"></span> Veg
+              </button>
+              <button type="button" class="mn-type-btn"
+                [class.non-veg]="!newItem.isVeg" (click)="newItem.isVeg = false">
+                <span class="mn-veg-dot non-veg"></span> Non-Veg
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Section: Pricing & Category ───────────────────────────────── -->
+        <div class="mn-form-section">
+          <div class="mn-section-header">
+            <i class="fas fa-tag"></i>
+            <span>Pricing &amp; Category</span>
+          </div>
+
+          <div class="mn-form-row">
+            <div class="mn-fg">
+              <label>Category <span class="mn-req">*</span></label>
+              <select [(ngModel)]="newItem.category" name="category" required (change)="onCategoryChange($event)">
+                <option value="" disabled>Select category</option>
+                <option *ngFor="let cat of formCategories" [value]="cat">{{ cat }}</option>
+              </select>
+            </div>
+            <div class="mn-fg">
+              <label>Sub Category</label>
+              <select [(ngModel)]="newItem.subCategory" name="subCategory"
+                [disabled]="subCategories.length === 0">
+                <option value="">{{ subCategories.length === 0 ? 'No sub categories' : 'Select sub category' }}</option>
+                <option *ngFor="let sub of subCategories" [value]="sub">{{ sub }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mn-form-row">
+            <div class="mn-fg">
+              <label>Menu Price (₹) <span class="mn-req">*</span></label>
+              <div class="mn-price-input-wrap">
+                <span class="mn-price-prefix">₹</span>
+                <input type="number" [(ngModel)]="newItem.restaurantPrice" name="restaurantPrice"
+                  placeholder="0" min="0" required
+                  (ngModelChange)="onRestaurantPriceChange()" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Hike % + Customer Price preview -->
+          <div class="mn-form-row mn-form-row-hike">
+            <div class="mn-fg">
+              <label>
+                Hike %
+                <span class="mn-hike-max-hint" *ngIf="maxHikePercentage > 0">(max {{ maxHikePercentage }}%)</span>
+              </label>
+              <div class="mn-price-input-wrap">
+                <input type="number" [(ngModel)]="newItem.hikePercentage" name="hikePercentage"
+                  placeholder="0" min="0" [max]="maxHikePercentage" step="0.5"
+                  (ngModelChange)="onHikePercentageChange()" />
+                <span class="mn-price-suffix">%</span>
+              </div>
+            </div>
+            <div class="mn-fg">
+              <label>Customer Price <span class="mn-disprice-badge">preview</span></label>
+              <div class="mn-disprice-preview">₹{{ computedDisplayPrice | number:'1.0-1' }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Section: Media & Availability ─────────────────────────────── -->
+        <div class="mn-form-section mn-section-bottom">
+          <div class="mn-section-header">
+            <i class="fas fa-image"></i>
+            <span>Media &amp; Availability</span>
+          </div>
+
+          <!-- Multi-image upload grid -->
+          <div class="mn-item-img-section"
+            (dragover)="$event.preventDefault()"
+            (dragleave)="$event.preventDefault()"
+            (drop)="onItemImageDrop($event)">
+
+            <div class="mn-item-img-header">
+              <span class="mn-item-img-title">Dish Photos <span>(optional)</span></span>
+              <span class="mn-item-img-count">{{ totalImageCount }} / {{ MAX_ITEM_IMAGES }}</span>
+            </div>
+
+            <div class="mn-item-img-grid">
+              <!-- Saved / existing images -->
+              <div class="mn-item-img-tile"
+                *ngFor="let url of newItem.image; let i = index">
+                <img [src]="url" alt="Dish photo" />
+                <button type="button" class="mn-tile-remove"
+                  (click)="removeExistingImage(i)">&#x2715;</button>
+              </div>
+
+              <!-- Pending new images (not yet uploaded) -->
+              <div class="mn-item-img-tile mn-tile-pending"
+                *ngFor="let preview of pendingImagePreviews; let i = index">
+                <img [src]="preview" alt="New photo" />
+                <span class="mn-tile-new-badge">New</span>
+                <button type="button" class="mn-tile-remove"
+                  (click)="removePendingImage(i)">&#x2715;</button>
+              </div>
+
+              <!-- Add tile -->
+              <div class="mn-item-img-tile mn-tile-add"
+                *ngIf="totalImageCount < MAX_ITEM_IMAGES"
+                (click)="itemFileInput.click()">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>Add</span>
+              </div>
+            </div>
+
+            <p class="mn-item-img-hint">
+              Tap + or drag &amp; drop · JPG / PNG / WebP · Max 10 MB each · Up to {{ MAX_ITEM_IMAGES }} photos
+            </p>
+            <!-- Hidden file input — multiple allowed -->
+            <input #itemFileInput type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple hidden (change)="onItemImageSelect($event)" />
+          </div>
+
+          <!-- Availability toggle -->
+          <div class="mn-avail-row">
+            <div class="mn-avail-text">
+              <span class="mn-avail-title">Available Now</span>
+              <span class="mn-avail-desc">Customers can order this item immediately</span>
+            </div>
+            <label class="mn-toggle">
+              <input type="checkbox" [(ngModel)]="newItem.isAvailable" name="available" />
+              <span class="mn-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Form actions -->
+        <div class="mn-form-actions">
+          <button type="button" class="mn-btn-cancel"
+            (click)="closeAddItemForm()" [disabled]="savingItem">
+            Cancel
+          </button>
+          <button type="submit" class="mn-btn-save" [disabled]="savingItem">
+            <i class="fas"
+              [class.fa-save]="!savingItem"
+              [class.fa-spinner]="savingItem"
+              [class.fa-spin]="savingItem"></i>
+            {{ savingItem ? 'Saving…' : (isEditMode ? 'Update Item' : 'Add to Menu') }}
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>

@@ -1,0 +1,322 @@
+@use '../../../../styles/variables' as *;
+@use '../../../../styles/mixins' as *;
+
+// Host element takes zero flex space — inner .sidebar is position:fixed
+:host {
+  display: contents;   // makes the host transparent to flex layout; children participate directly
+}
+
+// ── Sidebar dark tokens ─────────────────────────────────────────────────────
+$sidebar-bg:          #1C0A0A;
+$sidebar-border:      rgba(255, 255, 255, 0.07);
+$sidebar-text:        rgba(255, 255, 255, 0.52);
+$sidebar-text-hover:  rgba(255, 255, 255, 0.92);
+$sidebar-hover-bg:    rgba(255, 255, 255, 0.06);
+$sidebar-active-bg:   rgba(255, 197, 46, 0.12);
+$sidebar-active-text: hsl(43, 100%, 62%);
+$sidebar-active-bar:  hsl(43, 100%, 55%);
+$yum-yellow:          hsl(43, 100%, 55%);
+$dude-red:            hsl(0,  79%,  55%);
+// ─────────────────────────────────────────────────────────────────────────────
+
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  width: $sidebar-width;
+  background: $sidebar-bg;
+  border-right: 1px solid rgba(0, 0, 0, 0.25);
+  box-shadow: 2px 0 0 rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  z-index: $z-fixed;
+  transition: width $transition-base;
+  @include custom-scrollbar;
+
+  &.collapsed {
+    width: $sidebar-collapsed-width;
+
+    .sidebar-header {
+      padding: $spacing-lg $spacing-sm;
+      justify-content: center;
+
+      .logo {
+        width: 40px;
+        height: 60px;
+        cursor: pointer;
+        transition: all $transition-fast;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        .logo-svg {
+          width: 30px;
+          height: 30px;
+        }
+
+        &:hover {
+          transform: scale(1.1);
+          opacity: 0.8;
+        }
+      }
+
+      .brand {
+        display: none;
+      }
+    }
+
+    .nav-label,
+    .badge {
+      display: none;
+    }
+
+    .nav-link {
+      justify-content: center;
+      padding: $spacing-md;
+    }
+
+    .logout-btn {
+      justify-content: center;
+    }
+  }
+
+  @include mobile {
+    display: none; // replaced by bottom navigation bar on mobile
+  }
+
+  @include tablet {
+    width: $sidebar-width;
+    
+    &.collapsed {
+      width: $sidebar-collapsed-width;
+    }
+  }
+
+  @include laptop-up {
+    width: $sidebar-width;
+    
+    &.collapsed {
+      width: $sidebar-collapsed-width;
+    }
+  }
+}
+
+.sidebar-header {
+  padding: $spacing-xl;
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  position: relative;
+  border-bottom: 1px solid $sidebar-border;
+
+  .toggle-btn {
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: $sidebar-text-hover;
+    cursor: pointer;
+    @include flex-center;
+    transition: all $transition-fast;
+    flex-shrink: 0;
+    margin-left: auto;
+    position: relative;
+
+    &:hover {
+      background: $sidebar-hover-bg;
+      color: #FFFFFF;
+    }
+
+    &:active {
+      background: $sidebar-hover-bg;
+      transform: scale(0.92);
+    }
+
+    i {
+      font-size: 1rem;
+      transition: all $transition-fast;
+    }
+
+    @include mobile { display: none; }
+    // Tablet: show the chevron so users can collapse the sidebar after expanding it
+  }
+
+  .logo {
+    width: 45px;
+    height: 60px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .logo-svg {
+      width: 34px;
+      height: 34px;
+    }
+  }
+
+  .brand {
+    flex: 1;
+    min-width: 0;
+
+    .brand-name {
+      font-size: $font-size-xl;
+      font-weight: $font-weight-bold;
+      margin: 0 0 $spacing-xs;
+      line-height: 1;
+    }
+
+    .brand-yum  { color: $yum-yellow; }
+    .brand-dude { color: $dude-red; }
+
+    .brand-tagline {
+      font-size: $font-size-xs;
+      color: rgba(255, 255, 255, 0.38);
+      margin: 0;
+      line-height: 1;
+    }
+  }
+}
+
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: $spacing-lg 0;
+  
+  // Hide scrollbar but keep scroll functionality
+  scrollbar-width: none; // Firefox
+  -ms-overflow-style: none; // IE and Edge
+  
+  &::-webkit-scrollbar {
+    display: none; // Chrome, Safari, Opera
+  }
+
+  .nav-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .nav-item {
+    margin-bottom: $spacing-xs;
+    padding: 0 $spacing-md;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: $spacing-md;
+    padding: $spacing-md $spacing-lg;
+    color: $sidebar-text;
+    text-decoration: none;
+    border-radius: 3px;
+    transition: all $transition-fast;
+    font-size: $font-size-base;
+    font-weight: $font-weight-medium;
+    position: relative;
+
+    &:hover {
+      background: $sidebar-hover-bg;
+      color: $sidebar-text-hover;
+    }
+
+    &.active {
+      background: $sidebar-active-bg;
+      color: $sidebar-active-text;
+      font-weight: $font-weight-semibold;
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 60%;
+        background: $sidebar-active-bar;
+        border-radius: 0;
+      }
+    }
+
+    .nav-icon {
+      font-size: $font-size-lg;
+      flex-shrink: 0;
+      width: 24px;
+      text-align: center;
+    }
+
+    .nav-label {
+      flex: 1;
+      white-space: nowrap;
+    }
+
+    .badge {
+      background: $primary-orange;
+      color: #FFFFFF;
+      font-size: $font-size-xs;
+      font-weight: $font-weight-bold;
+      padding: 2px $spacing-sm;
+      border-radius: $radius-full;
+      min-width: 20px;
+      text-align: center;
+    }
+  }
+}
+
+// ── Tablet backdrop — dims content behind the expanded sidebar ─────────────────
+// Rendered as a sibling BEFORE <aside> in the template.
+// z-index is one step below the sidebar itself so it sits between sidebar and content.
+.sidebar-tablet-backdrop {
+  display: none;
+
+  @include tablet {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: calc(#{$z-fixed} - 1);
+    animation: backdropFadeIn 200ms ease both;
+    cursor: pointer;
+  }
+}
+
+@keyframes backdropFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sidebar-footer {
+  padding: $spacing-lg $spacing-md;
+  border-top: 1px solid $sidebar-border;
+
+  .logout-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: $spacing-md;
+    padding: $spacing-md $spacing-lg;
+    background: transparent;
+    border: none;
+    color: $sidebar-text;
+    border-radius: 3px;
+    font-size: $font-size-base;
+    font-weight: $font-weight-medium;
+    cursor: pointer;
+    transition: all $transition-fast;
+    font-family: $font-family;
+
+    &:hover {
+      background: rgba($status-error, 0.15);
+      color: hsl(0, 80%, 72%);
+    }
+
+    .nav-icon {
+      font-size: $font-size-lg;
+      width: 24px;
+      text-align: center;
+    }
+  }
+}
