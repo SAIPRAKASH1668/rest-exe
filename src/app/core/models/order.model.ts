@@ -30,6 +30,7 @@ export enum OrderStatus {
 export interface Order {
   orderId: string;
   customerPhone: string;
+  receiverPhone?: string; // NEW: receiver's mobile number (optional for backward compatibility)
   restaurantId: string;
   items: OrderItem[];
   foodTotal: number;

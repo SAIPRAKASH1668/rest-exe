@@ -1,0 +1,17 @@
+<!-- YumDude YD icon source. Text uses Cooper Black (Windows system font
+     C:\Windows\Fonts\COOPBL.TTF) — rasterize with a renderer that loads it. -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="soften" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="70"/>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="150" fill="#FFFDF7"/>
+  <g filter="url(#soften)">
+    <circle cx="330" cy="470" r="230" fill="rgba(255, 197, 46, 0.30)"/>
+    <circle cx="690" cy="560" r="230" fill="rgba(232, 53, 42, 0.25)"/>
+  </g>
+  <text x="512" y="720" text-anchor="middle" font-family="Cooper Black" font-weight="400" font-size="600">
+    <tspan fill="#FFC52E">Y</tspan><tspan fill="#E8352A">D</tspan>
+  </text>
+</svg>

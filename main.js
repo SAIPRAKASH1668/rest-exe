@@ -1,10 +1,20 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, powerSaveBlocker } = require('electron');
 const path         = require('path');
 const net          = require('net');
 const fs           = require('fs');
 const { execSync } = require('child_process');
 
 const TCP_TIMEOUT_MS = 10_000;
+
+// The order alarm must sound on a freshly booted, untouched machine — without
+// this switch Chromium blocks audio until the first user gesture.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// A second launch (double-clicked shortcut while hidden in tray) must focus the
+// existing window, not spawn a second polling instance.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
 
 function runPowerShellEncoded(script, timeout = 15000) {
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
@@ -143,7 +153,40 @@ const USE_REMOTE = true;
 const REMOTE_URL = 'https://yumdude.com';
 const LOCAL_FILE = path.join(__dirname, 'dist', 'yumdude-restaurant', 'browser', 'index.html');
 
+const RECONNECT_INTERVAL_MS = 10_000;
+
 let mainWindow;
+let tray;
+let isQuitting = false;
+let reconnectTimer = null;
+
+// Shown while the remote app is unreachable. Falling back to the stale local
+// bundle would silently run an outdated app version, so retry the live URL
+// instead.
+const RECONNECT_PAGE = 'data:text/html;charset=utf-8,' + encodeURIComponent(`
+  <html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#fff8f0">
+  <div style="text-align:center"><h2>YumDude Restaurant</h2>
+  <p>Connection lost — reconnecting automatically…</p>
+  <p style="color:#888">Check the internet connection if this persists.</p></div>
+  </body></html>`);
+
+function loadRemote() {
+  if (!mainWindow) return;
+  console.log('[Electron] Loading remote URL:', REMOTE_URL);
+  mainWindow.loadURL(REMOTE_URL).catch((err) => {
+    console.error('[Electron] Remote load failed:', err.message);
+    scheduleReconnect();
+  });
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer || isQuitting || !mainWindow) return;
+  mainWindow.loadURL(RECONNECT_PAGE).catch(() => {});
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    loadRemote();
+  }, RECONNECT_INTERVAL_MS);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -157,6 +200,9 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      // A minimized/covered window must keep its 20s order poll and alarm
+      // timers at full rate — Chromium throttles hidden windows otherwise.
+      backgroundThrottling: false,
     },
   });
 
@@ -168,17 +214,15 @@ function createWindow() {
 
   // ── Load remote or local ───────────────────────────────────────────────
   if (USE_REMOTE) {
-    console.log('[Electron] Loading remote URL:', REMOTE_URL);
-    mainWindow.loadURL(REMOTE_URL).catch((err) => {
-      console.error('[Electron] Remote load failed, falling back to local build:', err.message);
-      mainWindow.loadFile(LOCAL_FILE);
-    });
+    loadRemote();
 
-    // If the remote page fails after initial load (network drop, etc.)
-    mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    // Network drop / DNS failure after launch → reconnect loop, not the stale
+    // local bundle. Code -3 (ERR_ABORTED) fires on ordinary re-navigation and
+    // must be ignored; subframe failures don't take the app down either.
+    mainWindow.webContents.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
+      if (!isMainFrame || code === -3) return;
       console.error(`[Electron] Page load failed (${code}): ${desc} — ${url}`);
-      console.log('[Electron] Falling back to local build…');
-      mainWindow.loadFile(LOCAL_FILE);
+      scheduleReconnect();
     });
   } else {
     console.log('[Electron] Loading local build:', LOCAL_FILE);
@@ -190,9 +234,46 @@ function createWindow() {
     console.log('[Electron] Page loaded. printerAPI bridge active via preload.');
   });
 
+  // ── Close-to-tray ────────────────────────────────────────────────────────
+  // X must not kill order alerts; the app keeps running in the tray and only
+  // the tray menu (or app update) really quits it.
+  mainWindow.on('close', (e) => {
+    if (!isQuitting && tray) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+function showWindow() {
+  if (!mainWindow) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function createTray() {
+  tray = new Tray(path.join(__dirname, 'src/assets/icons/icon.ico'));
+  tray.setToolTip('YumDude Restaurant — watching for orders');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open YumDude Restaurant', click: showWindow },
+    { type: 'separator' },
+    {
+      label: 'Quit (stops order alerts)',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]));
+  tray.on('double-click', showWindow);
 }
 
 // ── IPC: open settings ────────────────────────────────────────────────────────
@@ -256,8 +337,8 @@ ipcMain.handle('printer:print-raw', async (event, { host, port, data }) => {
 
 // ── IPC: list USB printers (Windows only) ───────────────────────────────────
 // Multi-strategy scan covers all common ways a USB thermal printer appears on
-// Windows, including the RP3200 Plus and similar devices:
-//   Strategy 1 — Windows Spooler: printers on USB* or COMx port names
+// Windows, including the RP3200 Plus, Epson TM-series, and similar devices:
+//   Strategy 1 — Windows Spooler: any port name containing 'USB' (USB001, TMUSB001, USB_RP3200, …) or COMx
 //   Strategy 2 — PnP class Printer (Device Manager, may not be in spooler)
 //   Strategy 3 — USB-Serial COM ports (RS232-over-USB adapter, e.g. RP3200 RS232 interface)
 //
@@ -266,10 +347,10 @@ ipcMain.handle('printer:list-usb', async () => {
   const psScript = `
 $found = [System.Collections.Generic.Dictionary[string,object]]::new()
 
-# Strategy 1 — Windows Spooler printers with USB* or COMx port names
+# Strategy 1 — Windows Spooler printers with any USB-related port name (USB001, TMUSB001, etc.) or COMx
 try {
   $printers = Get-Printer -ErrorAction SilentlyContinue |
-    Where-Object { $_.PortName -match '^USB' -or $_.PortName -match '^COM[0-9]+$' }
+    Where-Object { $_.PortName -match 'USB' -or $_.PortName -match '^COM[0-9]+$' }
   foreach ($p in $printers) {
     if ($p.PortName -and -not $found.ContainsKey($p.PortName)) {
       $found[$p.PortName] = [PSCustomObject]@{
@@ -379,13 +460,45 @@ ipcMain.handle('printer:print-usb', async (event, { deviceName, data }) => {
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  // Reliability registrations FIRST — nothing below may depend on the tray or
+  // window succeeding, so a UI failure can't cost us auto-start or anti-sleep.
+
+  // Come back automatically after a reboot or power cut. Only register the
+  // packaged exe — a dev run would pin electron.exe into the user's startup.
+  if (app.isPackaged) {
+    app.setLoginItemSettings({ openAtLogin: true });
+    const { openAtLogin } = app.getLoginItemSettings();
+    console.log('[Electron] openAtLogin registered:', openAtLogin);
+  }
+
+  // The 20s order poll must survive system idle — without this, Windows sleep
+  // suspends the app and the restaurant silently stops receiving orders. The
+  // display may still turn off; only app suspension is blocked.
+  powerSaveBlocker.start('prevent-app-suspension');
+
   createWindow();
+
+  try {
+    createTray();
+  } catch (err) {
+    // Without a tray, close-to-tray would strand an invisible app — the close
+    // handler checks `tray` and quits normally instead.
+    console.error('[Electron] Tray creation failed:', err.message);
+    tray = null;
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+// Relaunched from the shortcut while hidden in the tray → surface the window.
+app.on('second-instance', showWindow);
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
+
+// The app lives in the tray; a destroyed window must not quit it (that would
+// stop order alerts). Quitting is only via the tray menu.
+app.on('window-all-closed', () => {});

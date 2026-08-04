@@ -1,6 +1,6 @@
 {
   "name": "yumdude-restaurant",
-  "version": "0.0.0",
+  "version": "1.1.1",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -56,11 +56,11 @@
     "@angular/cli": "^21.0.4",
     "@angular/compiler-cli": "^21.0.0",
     "@types/sockjs-client": "^1.5.4",
+    "electron": "^41.0.3",
+    "electron-builder": "^25.1.8",
     "jsdom": "^27.1.0",
     "typescript": "~5.9.2",
-    "vitest": "^4.0.8",
-    "electron": "^41.0.3",
-    "electron-builder": "^25.1.8"
+    "vitest": "^4.0.8"
   },
   "build": {
     "appId": "com.yumdude.restaurant",
@@ -72,7 +72,8 @@
       "dist/**/*",
       "main.js",
       "preload.js",
-      "package.json"
+      "package.json",
+      "src/assets/icons/icon.ico"
     ],
     "win": {
       "target": "nsis",
