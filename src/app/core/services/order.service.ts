@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, interval, Subscription } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { Order, OrdersResponse, OrderStatus, UpdateOrderStatusRequest, UpdateOrderStatusResponse } from '../models/order.model';
+import { PushEventsService } from './push-events.service';
 import { RestaurantContextService } from './restaurant-context.service';
 import { SoundService } from './sound.service';
 import { environment } from '../../../environments/environment';
@@ -21,19 +22,38 @@ export class OrderService {
   public loading$: Observable<boolean> = this.loadingSubject.asObservable();
   
   private pollingSubscription?: Subscription;
+  /** Healthy ntfy push subscription → polling demotes to reconciliation. */
+  private pushConnected = false;
+  private pushEventDebounce?: ReturnType<typeof setTimeout>;
+  private lastFetchAt = 0;
+  /** Reconciliation heartbeat while push delivers orders. */
+  private readonly PUSH_RECONCILE_INTERVAL = 5 * 60 * 1000;
 
   constructor(
     private http: HttpClient,
     private restaurantContext: RestaurantContextService,
-    private soundService: SoundService
+    private soundService: SoundService,
+    private pushEvents: PushEventsService
   ) {
     this.initializeOrderSync();
   }
 
   /**
-   * Initialize order synchronization (REST polling)
+   * Initialize order synchronization: ntfy push events drive freshness; the
+   * REST poll is a reconciliation safety net (full-rate only while the push
+   * subscription is down).
    */
   private initializeOrderSync(): void {
+    this.pushEvents.start();
+    this.pushEvents.connected$.subscribe((connected) => {
+      this.pushConnected = connected;
+    });
+    this.pushEvents.events$.subscribe(() => {
+      // Bursts of transitions collapse into one fetch; alarm/notification
+      // logic rides the existing fetch-diff path unchanged.
+      if (this.pushEventDebounce) clearTimeout(this.pushEventDebounce);
+      this.pushEventDebounce = setTimeout(() => this.fetchOrders(), 800);
+    });
     // Components should call fetchOrders() when they're ready
     this.setupPolling();
   }
@@ -43,6 +63,7 @@ export class OrderService {
    */
   fetchOrders(): void {
     const restaurantId = this.restaurantContext.getRestaurantId();
+    this.lastFetchAt = Date.now();
     this.loadingSubject.next(true);
 
     // Snapshot existing IDs before the fetch — used to detect new arrivals
@@ -119,10 +140,15 @@ export class OrderService {
   }
 
   /**
-   * Setup polling as fallback mechanism
+   * Setup polling as fallback mechanism. The 30s tick always runs, but while
+   * the push subscription is healthy it only actually fetches once per
+   * reconciliation interval — push handles the realtime path.
    */
   private setupPolling(): void {
     this.pollingSubscription = interval(this.POLLING_INTERVAL).subscribe(() => {
+      if (this.pushConnected && Date.now() - this.lastFetchAt < this.PUSH_RECONCILE_INTERVAL) {
+        return;
+      }
       this.fetchOrders();
     });
   }
