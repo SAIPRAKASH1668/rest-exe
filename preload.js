@@ -47,3 +47,14 @@ contextBridge.exposeInMainWorld('printerAPI', {
   printUsbRaw: (deviceName, b64) =>
     ipcRenderer.invoke('printer:print-usb', { deviceName, data: b64 }),
 });
+
+/**
+ * Exposes  window.desktopAlertAPI  to the Angular renderer:
+ *   surfaceForNewOrder()  → un-minimise / un-tray the window and pull it to
+ *                           the front, the desktop counterpart of the Android
+ *                           full-screen alarm activity. Safe no-op elsewhere:
+ *                           the web app checks for this bridge before calling.
+ */
+contextBridge.exposeInMainWorld('desktopAlertAPI', {
+  surfaceForNewOrder: () => ipcRenderer.invoke('alert:surface-window'),
+});

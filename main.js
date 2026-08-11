@@ -3,6 +3,7 @@ const path         = require('path');
 const net          = require('net');
 const fs           = require('fs');
 const { execSync } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 const TCP_TIMEOUT_MS = 10_000;
 
@@ -276,6 +277,191 @@ function createTray() {
   tray.on('double-click', showWindow);
 }
 
+// ── Auto-update ──────────────────────────────────────────────────────────────
+// Restaurants never reinstall on their own, so the app updates itself: it
+// polls the generic provider (an S3 folder holding latest.yml + the
+// installer), downloads in the background, and installs on a quiet moment.
+//
+// "Quiet" is the whole trick — restarting while an order is ringing or being
+// accepted would be far worse than running yesterday's build, so the install
+// waits until no alarm has surfaced for QUIET_PERIOD_MS.
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60_000; // every 30 min
+const QUIET_PERIOD_MS = 10 * 60_000;          // no order activity for 10 min
+const QUIET_RECHECK_MS = 60_000;              // re-test the quiet window
+const RESTART_COUNTDOWN_S = 10;               // visible warning before restart
+
+let lastAlarmAt = 0;
+let updateDownloaded = false;
+let installTimer = null;
+let updateWin = null;
+
+// Small always-on-top progress panel. Staff must never see the app vanish
+// with no explanation — they get the download bar, then a countdown, then
+// the restart. Driven from the main process via executeJavaScript so it
+// needs no preload and works whether the app UI is bundled or remote.
+const UPDATE_UI = 'data:text/html;charset=utf-8,' + encodeURIComponent(`
+<html><body style="margin:0;font-family:Segoe UI,sans-serif;background:#FFFDF7;color:#2b2b2b;
+  display:flex;align-items:center;justify-content:center;height:100vh">
+  <div style="text-align:center;width:88%">
+    <div style="font-size:20px;font-weight:700">
+      <span style="color:#FFC52E">Yum</span><span style="color:#E8352A">Dude</span>
+    </div>
+    <div id="msg" style="margin:10px 0 14px;font-size:14px">Downloading update…</div>
+    <div style="background:#F7F1DF;border-radius:99px;height:10px;overflow:hidden">
+      <div id="fill" style="background:#E8352A;height:100%;width:0%;transition:width .25s"></div>
+    </div>
+    <div id="pct" style="margin-top:8px;font-size:12px;color:#8a8378">0%</div>
+  </div>
+  <script>
+    function setProgress(p){
+      document.getElementById('fill').style.width = p + '%';
+      document.getElementById('pct').textContent = p + '%';
+    }
+    function setMessage(m){ document.getElementById('msg').textContent = m; }
+  </script>
+</body></html>`);
+
+function showUpdateWindow() {
+  if (updateWin && !updateWin.isDestroyed()) return updateWin;
+  updateWin = new BrowserWindow({
+    width: 420, height: 220, resizable: false, minimizable: false, maximizable: false,
+    alwaysOnTop: true, skipTaskbar: false, title: 'YumDude update',
+    icon: path.join(__dirname, 'src/assets/icons/icon.ico'),
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+  });
+  updateWin.setMenu(null);
+  updateWin.loadURL(UPDATE_UI).catch(() => {});
+  updateWin.on('closed', () => { updateWin = null; });
+  return updateWin;
+}
+
+function updateUi(fn, arg) {
+  if (!updateWin || updateWin.isDestroyed()) return;
+  const js = typeof arg === 'string' ? `${fn}(${JSON.stringify(arg)})` : `${fn}(${arg})`;
+  updateWin.webContents.executeJavaScript(js).catch(() => {});
+}
+
+function initAutoUpdater() {
+  // The app is unsigned, so skip Windows publisher-signature validation —
+  // integrity still comes from the sha512 in latest.yml.
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  try { autoUpdater.verifyUpdateCodeSignature = false; } catch (_) {}
+  autoUpdater.logger = null;
+
+  autoUpdater.on('checking-for-update', () => console.log('[update] checking…'));
+  autoUpdater.on('update-not-available', (i) => console.log('[update] up to date:', i?.version));
+
+  autoUpdater.on('update-available', (i) => {
+    console.log('[update] downloading', i?.version);
+    showUpdateWindow();
+    updateUi('setMessage', `Downloading update ${i?.version || ''}…`);
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[update] error:', err?.message);
+    // Never strand the panel on screen after a failed download.
+    if (updateWin && !updateWin.isDestroyed()) updateWin.close();
+    mainWindow?.setProgressBar(-1);
+  });
+
+  autoUpdater.on('download-progress', (p) => {
+    const pct = Math.round(p.percent);
+    updateUi('setProgress', pct);
+    mainWindow?.setProgressBar(pct / 100); // taskbar icon fills too
+    if (pct % 25 === 0) console.log(`[update] ${pct}%`);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[update] downloaded', info?.version, '— will install at the next quiet moment');
+    updateDownloaded = true;
+    mainWindow?.setProgressBar(-1);
+    updateUi('setProgress', 100);
+    updateUi('setMessage', 'Update ready — restarting when the counter is free…');
+    scheduleQuietInstall();
+  });
+
+  const check = () => autoUpdater.checkForUpdates().catch((e) => console.error('[update] check failed:', e?.message));
+  // Give the app a moment to finish loading before the first check.
+  setTimeout(check, 20_000);
+  setInterval(check, UPDATE_CHECK_INTERVAL_MS);
+}
+
+/** Install once the counter has been quiet; re-test every minute until then. */
+function scheduleQuietInstall() {
+  if (installTimer) return;
+
+  const tryInstall = () => {
+    if (!updateDownloaded) return;
+    const quietFor = Date.now() - lastAlarmAt;
+    if (quietFor <= QUIET_PERIOD_MS) {
+      const mins = Math.ceil((QUIET_PERIOD_MS - quietFor) / 60_000);
+      console.log('[update] order activity recently — postponing install');
+      // Say *why* it is waiting: a panel that just sits there reads as stuck.
+      updateUi('setMessage', `Update ready — restarting after orders settle (~${mins} min)`);
+      return;
+    }
+    console.log('[update] quiet window — installing and restarting');
+    if (installTimer) { clearInterval(installTimer); installTimer = null; }
+    startRestartCountdown();
+  };
+
+  // Check straight away: on an idle counter there is nothing to wait for, and
+  // making the operator watch a static panel for a minute looks like a hang.
+  tryInstall();
+  if (!updateDownloaded || installTimer) return;
+  installTimer = setInterval(tryInstall, QUIET_RECHECK_MS);
+}
+
+/** Visible countdown, then swap and relaunch. */
+function startRestartCountdown() {
+  showUpdateWindow();
+  let left = RESTART_COUNTDOWN_S;
+  updateUi('setProgress', 100);
+  const tick = () => {
+    updateUi('setMessage', `Installing update — restarting in ${left}s…`);
+    if (left <= 0) {
+      clearInterval(timer);
+      isQuitting = true; // let the close-to-tray handler through
+      // isSilent=true (no installer UI), isForceRunAfter=true (relaunch after).
+      autoUpdater.quitAndInstall(true, true);
+      return;
+    }
+    left -= 1;
+  };
+  const timer = setInterval(tick, 1000);
+  tick();
+}
+
+// ── IPC: surface the window for a new order ──────────────────────────────────
+// Desktop counterpart of the Android full-screen alarm: a minimised or
+// tray-hidden app must put itself in front of whatever the counter PC is doing
+// when an order lands, or the ringing has nothing to point at.
+ipcMain.handle('alert:surface-window', async () => {
+  if (!mainWindow) return { surfaced: false };
+  // Doubles as the "an order is being worked right now" signal for the
+  // updater, which must never restart the app mid-order.
+  lastAlarmAt = Date.now();
+  try {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    // Windows refuses focus to a background process, so briefly pin the window
+    // on top: that lifts it above the foreground app, then we drop the pin so
+    // it behaves like a normal window once the operator is looking at it.
+    mainWindow.setAlwaysOnTop(true);
+    mainWindow.focus();
+    setTimeout(() => {
+      try { mainWindow?.setAlwaysOnTop(false); } catch (_) {}
+    }, 3000);
+    // Taskbar highlight for the case where the operator is on another screen.
+    mainWindow.flashFrame(true);
+    return { surfaced: true };
+  } catch (err) {
+    console.error('[Electron] Could not surface window for order:', err.message);
+    return { surfaced: false };
+  }
+});
+
 // ── IPC: open settings ────────────────────────────────────────────────────────
 ipcMain.handle('printer:open-settings', async () => {
   if (mainWindow) {
@@ -477,6 +663,9 @@ app.whenReady().then(() => {
   powerSaveBlocker.start('prevent-app-suspension');
 
   createWindow();
+
+  // Only a packaged build has an installer to replace; a dev run would throw.
+  if (app.isPackaged) initAutoUpdater();
 
   try {
     createTray();
