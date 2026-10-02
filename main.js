@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, shell, Tray, Menu, powerSaveBlocker } = req
 const path         = require('path');
 const net          = require('net');
 const fs           = require('fs');
-const { execSync } = require('child_process');
+const { execSync, execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 
 const TCP_TIMEOUT_MS = 10_000;
@@ -17,38 +17,41 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
 
-function runPowerShellEncoded(script, timeout = 15000) {
+// ── PowerShell runner ─────────────────────────────────────────────────────────
+// Async on purpose. The main process must never block on a print: while a
+// synchronous PowerShell run was in flight, every other IPC call (the bill
+// queued behind the KOT, the alarm window surfacing) sat waiting for it.
+function runPowerShellEncodedAsync(script, timeout = 15000) {
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  return execSync(
-    `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
-    { encoding: 'utf8', timeout }
-  ).trim();
+  return new Promise((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+      { encoding: 'utf8', timeout, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (err) {
+          const detail = String(stderr || stdout || err.message || '').trim();
+          reject(new Error(detail || 'PowerShell failed'));
+          return;
+        }
+        resolve(String(stdout || '').trim());
+      }
+    );
+  });
 }
 
 function escapePsSingleQuoted(value) {
   return String(value).replace(/'/g, "''");
 }
 
-async function writeRawViaSpoolerByPort(portName, dataBuf) {
-  const tempFile = path.join(app.getPath('temp'), `yumdude-raw-${Date.now()}-${Math.random().toString(16).slice(2)}.bin`);
-  fs.writeFileSync(tempFile, dataBuf);
-
-  const psPort = escapePsSingleQuoted(portName);
-  const psFile = escapePsSingleQuoted(tempFile);
-  const script = `
-$ErrorActionPreference = 'Stop'
-$port = '${psPort}'
-$file = '${psFile}'
-
-$printers = Get-Printer -ErrorAction SilentlyContinue |
-  Where-Object { $_.PortName -eq $port } |
-  Select-Object -ExpandProperty Name
-
-if (-not $printers -or $printers.Count -eq 0) {
-  throw "No printer mapped to port: $port"
-}
-
-Add-Type -TypeDefinition @"
+// ── RAW spooler helper (C# via P/Invoke) ─────────────────────────────────────
+// Compiled ONCE per machine into userData and merely loaded afterwards.
+// `Add-Type -TypeDefinition` on C# source recompiles with csc on every run
+// (2–4 s each), and with KOT + bill that was most of the "bill prints 5–10 s
+// after Accept" delay. Bump RAW_HELPER_VERSION whenever the C# changes so a
+// stale DLL can never be loaded.
+const RAW_HELPER_VERSION = 'v2';
+const RAW_HELPER_SOURCE = `
 using System;
 using System.Runtime.InteropServices;
 
@@ -103,8 +106,91 @@ public static class RawPrinterHelper {
     }
   }
 }
-"@
+`;
 
+function rawHelperDllPath() {
+  return path.join(app.getPath('userData'), `rawprint-helper-${RAW_HELPER_VERSION}.dll`);
+}
+
+/**
+ * PowerShell prelude that makes [RawPrinterHelper] available: load the cached
+ * DLL; else compile it to a per-process temp name and move it into place (so a
+ * concurrent KOT + bill never read a half-written file); else, if anything
+ * about the cache misbehaves, compile in memory exactly as every print did
+ * before. The print itself never depends on the cache working.
+ */
+function rawHelperPrelude() {
+  const dll = escapePsSingleQuoted(rawHelperDllPath());
+  return `
+$dll = '${dll}'
+$src = @'
+${RAW_HELPER_SOURCE}
+'@
+$helperLoaded = $false
+if (Test-Path -LiteralPath $dll) {
+  try { Add-Type -Path $dll -ErrorAction Stop; $helperLoaded = $true } catch { }
+}
+if (-not $helperLoaded) {
+  $tmp = "$dll.$PID.tmp"
+  try {
+    Add-Type -TypeDefinition $src -OutputAssembly $tmp -ErrorAction Stop
+    try { Move-Item -LiteralPath $tmp -Destination $dll -Force -ErrorAction Stop } catch { }
+    $load = if (Test-Path -LiteralPath $tmp) { $tmp } else { $dll }
+    Add-Type -Path $load -ErrorAction Stop
+    $helperLoaded = $true
+  } catch { }
+}
+if (-not $helperLoaded) {
+  Add-Type -TypeDefinition $src
+}
+`;
+}
+
+/** Remove old-version DLLs and leftover .tmp compiles. Startup only, when nothing is printing. */
+function cleanRawHelperArtifacts() {
+  try {
+    const dir  = app.getPath('userData');
+    const keep = path.basename(rawHelperDllPath());
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.startsWith('rawprint-helper-') || f === keep) continue;
+      try { fs.unlinkSync(path.join(dir, f)); } catch (_) {}
+    }
+  } catch (_) {}
+}
+
+/** Compile the helper ahead of the first order so even the first print of the day is fast. */
+function warmUpRawPrintHelper() {
+  const script = `$ErrorActionPreference = 'Continue'\n${rawHelperPrelude()}\nif (Test-Path -LiteralPath $dll) { "CACHED" } else { "MEMORY" }`;
+  runPowerShellEncodedAsync(script, 90_000)
+    .then((out) => console.log('[Electron] raw print helper ready:', out))
+    .catch((err) => console.warn('[Electron] raw print helper warm-up failed:', err.message));
+}
+
+/**
+ * Port → spooler printer name, learned from the first successful print.
+ * Skips the ~1 s Get-Printer CIM query on every later job for that port.
+ */
+const printerNameByPort = new Map();
+
+function spoolerPrintScript(portName, tempFile, knownPrinterName) {
+  const psPort = escapePsSingleQuoted(portName);
+  const psFile = escapePsSingleQuoted(tempFile);
+  const resolvePrinters = knownPrinterName
+    ? `$printers = @('${escapePsSingleQuoted(knownPrinterName)}')`
+    : `
+$printers = @(Get-Printer -ErrorAction SilentlyContinue |
+  Where-Object { $_.PortName -eq $port } |
+  Select-Object -ExpandProperty Name)
+if ($printers.Count -eq 0) {
+  throw "No printer mapped to port: $port"
+}`;
+
+  return `
+$ErrorActionPreference = 'Stop'
+$port = '${psPort}'
+$file = '${psFile}'
+${resolvePrinters}
+${rawHelperPrelude()}
 $bytes = [System.IO.File]::ReadAllBytes($file)
 $lastErr = $null
 foreach ($printer in $printers) {
@@ -119,12 +205,29 @@ foreach ($printer in $printers) {
     $lastErr = $_.Exception.Message
   }
 }
-
 throw "RAW spooler send failed on port $port. Last error: $lastErr"
 `;
+}
+
+async function writeRawViaSpoolerByPort(portName, dataBuf) {
+  const tempFile = path.join(app.getPath('temp'), `yumdude-raw-${Date.now()}-${Math.random().toString(16).slice(2)}.bin`);
+  fs.writeFileSync(tempFile, dataBuf);
 
   try {
-    const out = runPowerShellEncoded(script, 20000);
+    const cached = printerNameByPort.get(portName);
+    let out;
+    try {
+      out = await runPowerShellEncodedAsync(spoolerPrintScript(portName, tempFile, cached), 30_000);
+    } catch (err) {
+      if (!cached) throw err;
+      // Printer renamed, re-installed or removed since we learned its name:
+      // forget it and resolve by port once more before giving up.
+      console.warn(`[Electron] cached printer "${cached}" on ${portName} failed (${err.message}) — re-resolving by port`);
+      printerNameByPort.delete(portName);
+      out = await runPowerShellEncodedAsync(spoolerPrintScript(portName, tempFile, null), 30_000);
+    }
+    const m = /^OK:(.+)$/m.exec(out);
+    if (m) printerNameByPort.set(portName, m[1].trim());
     console.log(`[Electron] USB spooler print OK → port ${portName} (${dataBuf.length} bytes) ${out}`);
     return { ok: true };
   } finally {
@@ -618,31 +721,68 @@ $found.Values | ConvertTo-Json -Compress
 // deviceName is the Windows port name — 'USB001' for direct USB, 'COM3' for
 // RS232-over-USB.  For COM ports, configures baud rate (115200) to match the
 // RP3200 Plus RS232 interface before writing.
-ipcMain.handle('printer:print-usb', async (event, { deviceName, data }) => {
+//
+// Jobs for the SAME port run one after another (two raw writes interleaving
+// on one device would garble both tickets); jobs for different ports run
+// concurrently, so a KOT on USB001 never delays a bill on USB002.
+const portQueues = new Map();
+
+function enqueueOnPort(deviceName, task) {
+  const prev = portQueues.get(deviceName) || Promise.resolve();
+  const run  = prev.catch(() => {}).then(task);
+  portQueues.set(deviceName, run);
+  run.catch(() => {}).finally(() => {
+    if (portQueues.get(deviceName) === run) portQueues.delete(deviceName);
+  });
+  return run;
+}
+
+// Spooler port names (USB001, "USB_RP3200 plus_1", …) never become a writable
+// \\.\ device path. Remember the first failure so later prints skip straight
+// to the spooler instead of paying for the failed open every time.
+const directWriteUnsupported = new Set();
+
+ipcMain.handle('printer:print-usb', (event, { deviceName, data }) => {
+  return enqueueOnPort(deviceName, () => printUsb(deviceName, data));
+});
+
+async function printUsb(deviceName, data) {
   const portPath = '\\\\.\\' + deviceName;   // → \\.\USB001 or \\.\COM3
   const buf      = Buffer.from(data, 'base64');
+  const isCom    = /^COM\d+$/i.test(deviceName);
 
   // For RS232 COM ports configure baud rate before sending ESC/POS bytes.
-  if (/^COM\d+$/i.test(deviceName)) {
+  if (isCom) {
     try {
       execSync(`mode ${deviceName.toUpperCase()} BAUD=115200 PARITY=N DATA=8 STOP=1`,
-        { encoding: 'utf8', timeout: 3000 });
+        { encoding: 'utf8', timeout: 3000, windowsHide: true });
     } catch (e) {
       console.warn(`[Electron] COM port config warning (${deviceName}):`, e.message);
     }
   }
 
-  try {
-    await writeRawToDevicePath(portPath, buf);
-    console.log(`[Electron] USB direct print OK → ${portPath} (${buf.length} bytes)`);
-    return { ok: true };
-  } catch (directErr) {
-    // Custom spooler port names (e.g. USB_RP3200 plus_1) may not map to a
-    // writable device path; fallback to RAW print via Windows spooler.
-    console.warn(`[Electron] USB direct print failed for ${deviceName}:`, directErr.message);
-    return await writeRawViaSpoolerByPort(deviceName, buf);
+  if (!directWriteUnsupported.has(deviceName)) {
+    try {
+      await writeRawToDevicePath(portPath, buf);
+      console.log(`[Electron] USB direct print OK → ${portPath} (${buf.length} bytes)`);
+      return { ok: true };
+    } catch (directErr) {
+      console.warn(`[Electron] USB direct print failed for ${deviceName}:`, directErr.message);
+      // COM ports stay on the direct path: a failure there is usually transient
+      // (port busy) and the spooler rarely has a printer mapped to a COM port.
+      if (!isCom) directWriteUnsupported.add(deviceName);
+    }
   }
-});
+
+  try {
+    return await writeRawViaSpoolerByPort(deviceName, buf);
+  } catch (spoolErr) {
+    // The spooler cannot see this port either. Clear the memo so the next
+    // print gets the direct path back, in case the device re-enumerated.
+    directWriteUnsupported.delete(deviceName);
+    throw spoolErr;
+  }
+}
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
@@ -663,6 +803,13 @@ app.whenReady().then(() => {
   powerSaveBlocker.start('prevent-app-suspension');
 
   createWindow();
+
+  // Pre-compile the RAW spooler helper so the first KOT of the day doesn't
+  // pay the csc compile. Delayed so it never competes with page load.
+  if (process.platform === 'win32') {
+    cleanRawHelperArtifacts();
+    setTimeout(warmUpRawPrintHelper, 15_000);
+  }
 
   // Only a packaged build has an installer to replace; a dev run would throw.
   if (app.isPackaged) initAutoUpdater();
